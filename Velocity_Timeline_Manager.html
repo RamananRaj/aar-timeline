@@ -1,0 +1,1863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AAR Programs of Work — Timeline Manager</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#F1F5F9;color:#1E293B;font-size:14px;line-height:1.5;min-height:100vh}
+
+.hdr{background:#0F2544;color:#fff;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.hdr-title{font-size:17px;font-weight:700}
+.hdr-sub{font-size:11px;color:#94A3B8;margin-top:1px}
+.hdr-actions{display:flex;gap:8px;align-items:center}
+
+.btn{padding:7px 15px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:5px}
+.btn-primary{background:#0D9488;color:#fff}.btn-primary:hover{background:#0F766E}
+.btn-ghost{background:transparent;color:#94A3B8;border:1px solid #334155}.btn-ghost:hover{background:#1E3A5F;color:#fff}
+.btn-danger{background:#DC2626;color:#fff}.btn-danger:hover{background:#B91C1C}
+.btn-teal{background:#0D9488;color:#fff;font-size:11px;padding:4px 10px}.btn-teal:hover{background:#0F766E}
+.btn-sm{padding:4px 10px;font-size:11px}
+
+.stats{background:#1E3A5F;padding:10px 24px;display:flex;gap:0}
+.stat{padding:6px 20px;text-align:center;border-right:1px solid #0F2544}
+.stat:first-child{padding-left:0}.stat:last-child{border-right:none}
+.stat-val{font-size:22px;font-weight:700;color:#fff;line-height:1}
+.stat-val.teal{color:#0D9488}.stat-val.amber{color:#F59E0B}
+.stat-lbl{font-size:10px;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+
+.controls{background:#fff;border-bottom:1px solid #E2E8F0;padding:10px 24px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ctrl-label{font-size:11px;color:#64748B;white-space:nowrap}
+select,input[type=text],input[type=search]{padding:6px 10px;border:1px solid #CBD5E1;border-radius:5px;font-size:12px;color:#1E293B;background:#fff}
+select:focus,input:focus{outline:none;border-color:#0D9488;box-shadow:0 0 0 2px rgba(13,148,136,.12)}
+input[type=search]{width:180px}
+.ctrl-sep{width:1px;background:#E2E8F0;align-self:stretch;margin:0 2px}
+.controls-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+
+.legend{display:flex;gap:12px;flex-wrap:wrap}
+.leg{display:flex;align-items:center;gap:4px;font-size:11px;color:#64748B}
+.leg-sw{width:11px;height:11px;border-radius:2px;flex-shrink:0}
+
+.view-tabs{display:flex;gap:0;background:#F1F5F9;border-radius:6px;padding:2px}
+.vtab{padding:5px 13px;font-size:11px;font-weight:600;border-radius:4px;cursor:pointer;border:none;background:transparent;color:#64748B;transition:all .15s}
+.vtab.active{background:#fff;color:#0F2544;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+
+.main{padding:16px 24px 40px}
+.gantt-card{background:#fff;border-radius:8px;border:1px solid #E2E8F0;overflow:hidden}
+
+/* Gantt header */
+.gantt-head{display:flex;background:#F8FAFC;border-bottom:2px solid #E2E8F0}
+.gh-info{width:320px;min-width:320px;padding:9px 14px;font-size:10px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.6px;border-right:1px solid #E2E8F0}
+.gh-months{flex:1;display:flex}
+.gh-mo{flex:1;padding:9px 4px;text-align:center;font-size:10px;font-weight:700;color:#64748B;border-right:1px solid #E2E8F0;letter-spacing:.3px}
+.gh-mo:last-child{border-right:none}
+
+/* Section header row */
+.g-section{display:flex;background:#F8FAFC;border-bottom:1px solid #E2E8F0}
+.g-sec-info{width:320px;min-width:320px;padding:6px 14px;border-right:1px solid #E2E8F0;display:flex;align-items:center;gap:8px}
+.g-sec-bar{flex:1}
+
+/* Project row */
+.g-row{display:flex;border-bottom:1px solid #F1F5F9}
+.g-row:last-child{border-bottom:none}
+.g-row:hover{background:#FAFBFC}
+
+.g-info{width:320px;min-width:320px;padding:7px 10px 7px 8px;border-right:1px solid #E2E8F0;display:flex;align-items:center;gap:6px;position:relative}
+.g-info:hover .edit-hint{opacity:1}
+.edit-hint{font-size:10px;color:#CBD5E1;opacity:0;transition:opacity .15s;flex-shrink:0;cursor:pointer}
+
+/* Expand toggle */
+.expand-btn{width:18px;height:18px;border:none;background:none;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#94A3B8;font-size:10px;border-radius:3px;transition:all .15s}
+.expand-btn:hover{background:#F1F5F9;color:#0F2544}
+.expand-btn.has-phases{color:#0D9488}
+.phase-count{font-size:9px;color:#0D9488;font-weight:700;margin-left:-4px;flex-shrink:0}
+
+/* Gantt bars area */
+.g-bars{flex:1;position:relative;height:40px}
+.col-lines{position:absolute;inset:0;display:flex;pointer-events:none}
+.col-line{flex:1;border-right:1px solid #F1F5F9}
+.col-line:last-child{border-right:none}
+
+.g-bar{position:absolute;top:8px;height:22px;border-radius:3px;cursor:pointer;display:flex;align-items:center;padding:0 7px;min-width:6px;transition:filter .15s}
+.g-bar:hover{filter:brightness(.85)}
+.g-bar-lbl{font-size:9px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-bar-tbd{background:transparent!important;border-style:dashed;border-width:2px;top:9px;height:20px;cursor:pointer}
+.today-line{position:absolute;top:0;bottom:0;width:2px;pointer-events:none;z-index:10}
+
+/* Phase rows */
+.g-phase-row{display:flex;border-bottom:1px solid #F1F5F9;background:#FAFEFF;animation:phaseIn .15s ease}
+@keyframes phaseIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.g-phase-row:last-child{border-bottom:1px solid #E2E8F0}
+.g-phase-info{width:320px;min-width:320px;padding:5px 10px 5px 36px;border-right:1px solid #E2E8F0;display:flex;align-items:center;gap:6px;cursor:pointer}
+.g-phase-info:hover{background:#F0FDF9}
+.g-phase-bars{flex:1;position:relative;height:32px}
+.g-pbar{position:absolute;top:7px;height:17px;border-radius:2px;cursor:pointer;display:flex;align-items:center;padding:0 5px;min-width:4px;opacity:.92;transition:opacity .15s}
+.g-pbar:hover{opacity:1;filter:brightness(.88)}
+.g-pbar-lbl{font-size:8px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-pbar-tbd{background:transparent!important;border-style:dashed;border-width:1.5px;top:8px;height:15px}
+
+/* Add phase row */
+.g-add-phase-row{display:flex;border-bottom:1px solid #E2E8F0;background:#F8FFF9}
+.g-add-phase-btn{width:320px;min-width:320px;padding:5px 10px 5px 36px;border-right:1px solid #E2E8F0;border:none;background:none;font-size:11px;color:#0D9488;cursor:pointer;text-align:left;font-weight:600;display:flex;align-items:center;gap:4px}
+.g-add-phase-btn:hover{background:#F0FDF9}
+.g-add-phase-spacer{flex:1}
+
+/* Phase badge */
+.pbadge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;flex-shrink:0;color:#fff}
+
+/* Stream + status badges */
+.sbadge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;flex-shrink:0}
+.sb-reg{background:#FEE2E2;color:#991B1B}.sb-nonreg{background:#EDE9FE;color:#5B21B6}
+.sb-gps{background:#DBEAFE;color:#1E40AF}.sb-bau{background:#E0F2FE;color:#075985}
+.sdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.sd-active{background:#0D9488}.sd-planning{background:#F59E0B}.sd-tbd{background:#94A3B8}.sd-completed{background:#16A34A}
+
+.pname{font-size:12px;color:#1E293B;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pname-tbd{color:#94A3B8;font-style:italic}
+.res-pill{font-size:9px;color:#94A3B8;flex-shrink:0}
+
+/* Empty */
+.empty-state{padding:56px;text-align:center;color:#94A3B8}
+.empty-state h3{font-size:15px;color:#64748B;margin-bottom:6px}
+
+/* Tooltip */
+.tip{position:fixed;background:#0F2544;color:#fff;padding:10px 13px;border-radius:7px;font-size:11px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .12s;max-width:240px;line-height:1.55;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.tip.on{opacity:1}
+
+/* Modal shared */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .18s}
+.mo.open{opacity:1;pointer-events:all}
+.mo-box{background:#fff;border-radius:10px;width:100%;max-width:530px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.22)}
+.mo-box-sm{max-width:420px}
+.mo-head{padding:18px 24px 14px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1}
+.mo-title{font-size:15px;font-weight:700;color:#0F2544}
+.mo-close{background:none;border:none;font-size:22px;color:#94A3B8;cursor:pointer;line-height:1;padding:2px 6px;border-radius:4px}
+.mo-close:hover{background:#F1F5F9;color:#1E293B}
+.mo-body{padding:18px 24px}
+.fg{margin-bottom:14px}
+.fl{font-size:12px;font-weight:600;color:#374151;margin-bottom:5px;display:block}
+.fl .req{color:#DC2626}
+.fi{width:100%;padding:8px 11px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;color:#1E293B;font-family:inherit}
+.fi:focus{outline:none;border-color:#0D9488;box-shadow:0 0 0 3px rgba(13,148,136,.1)}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fhint{font-size:10px;color:#94A3B8;margin-top:3px}
+.mo-foot{padding:14px 24px 18px;border-top:1px solid #E2E8F0;display:flex;justify-content:space-between;align-items:center;position:sticky;bottom:0;background:#fff}
+.mo-foot-r{display:flex;gap:8px}
+
+/* Phases section inside project modal */
+.phases-section{border-top:1px solid #F1F5F9;margin-top:4px;padding-top:14px}
+.phase-chip-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.phase-chip{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#F8FAFC;border-radius:6px;border:1px solid #E2E8F0;cursor:pointer;transition:background .1s}
+.phase-chip:hover{background:#F0FDF9;border-color:#0D9488}
+.phase-chip-bar{height:10px;border-radius:2px;min-width:40px;max-width:100px}
+.phase-chip-name{font-size:12px;font-weight:600;color:#1E293B;flex:1}
+.phase-chip-dates{font-size:10px;color:#94A3B8}
+.phase-chip-del{background:none;border:none;cursor:pointer;color:#CBD5E1;font-size:14px;padding:2px 4px;border-radius:3px}
+.phase-chip-del:hover{color:#DC2626;background:#FEE2E2}
+.no-phases-msg{font-size:12px;color:#94A3B8;font-style:italic;padding:8px 0}
+
+/* ── Resource View ─────────────────────────────────── */
+.rstab{padding:5px 16px;font-size:11px;font-weight:600;border-radius:4px;cursor:pointer;border:none;background:transparent;color:#64748B;transition:all .15s}
+.rstab.active{background:#fff;color:#0F2544;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.res-card{background:#fff;border-radius:8px;border:1px solid #E2E8F0;padding:20px;margin-bottom:16px}
+.res-card-title{font-size:12px;font-weight:700;color:#0F2544;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.res-hint{font-size:10px;font-weight:400;color:#94A3B8;text-transform:none;letter-spacing:0}
+.res-drill{background:#F0FDF9;border:1px solid #0D9488;border-radius:8px;padding:16px;margin-bottom:16px}
+.res-drill-title{font-size:12px;font-weight:700;color:#0F2544;margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dtable{width:100%;border-collapse:collapse}
+.dtable th{font-size:10px;font-weight:700;color:#64748B;text-transform:uppercase;padding:6px 10px;border-bottom:1px solid #E2E8F0;text-align:left;letter-spacing:.3px}
+.dtable td{font-size:12px;color:#1E293B;padding:6px 10px;border-bottom:1px solid #F1F5F9}
+.dtable tr:last-child td{border-bottom:none}
+.squad-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.sq-card{background:#F8FAFC;border-radius:6px;padding:14px;border:1px solid #E2E8F0}
+.sq-head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.sq-slider-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.sq-slider-row input[type=range]{flex:1;accent-color:#0D9488}
+.sq-val{font-size:18px;font-weight:700;color:#0F2544;min-width:28px;text-align:right}
+.sqtable{width:100%;border-collapse:collapse}
+.sqtable th{font-size:9px;font-weight:700;color:#94A3B8;text-transform:uppercase;padding:4px 8px;border-bottom:1px solid #E2E8F0;text-align:center}
+.sqtable td{font-size:11px;padding:5px 8px;text-align:center;border-bottom:1px solid #F1F5F9}
+.sqtable tr:last-child td{border-bottom:none}
+.sqtable td:first-child{text-align:left;font-weight:600;color:#374151}
+.cell-over{color:#DC2626;font-weight:700}
+.cell-ok{color:#16A34A;font-weight:600}
+.cell-neutral{color:#94A3B8}
+.sq-summary{display:flex;gap:0;margin-top:12px;padding-top:12px;border-top:1px solid #E2E8F0}
+.sq-sum-item{flex:1;text-align:center;border-right:1px solid #E2E8F0}
+.sq-sum-item:last-child{border-right:none}
+.sq-sum-val{font-size:20px;font-weight:700;line-height:1}
+.sq-sum-lbl{font-size:9px;color:#64748B;text-transform:uppercase;letter-spacing:.3px;margin-top:3px}
+.res-legend{display:flex;gap:16px;margin-top:12px;font-size:11px;color:#64748B;flex-wrap:wrap}
+.res-leg-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+
+/* ── Resource Levelling View ───────────────────────── */
+.lvtab{padding:6px 18px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:none;background:transparent;color:#64748B;transition:all .15s}
+.lvtab.active{background:#fff;color:#0F2544;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.lv-slider-wrap{display:flex;align-items:center;gap:14px;padding:16px 0 6px;border-top:1px solid #F1F5F9;margin-top:14px}
+.lv-slider-wrap input[type=range]{flex:1;height:8px;accent-color:#F59E0B;cursor:pointer}
+.lv-cap-val{font-size:28px;font-weight:800;color:#F59E0B;min-width:40px;text-align:right;line-height:1}
+.lv-legend{display:flex;gap:18px;margin-top:10px;font-size:11px;color:#64748B;flex-wrap:wrap}
+.lv-cards{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.lv-card{flex:1;min-width:95px;border-radius:10px;padding:14px 10px;text-align:center;transition:transform .1s}
+.lv-card:hover{transform:translateY(-2px)}
+.lv-card-month{font-size:10px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.lv-card-demand{font-size:28px;font-weight:800;color:#0F2544;line-height:1}
+.lv-card-label{font-size:9px;color:#94A3B8;margin-bottom:6px}
+.lv-card-minibar{height:5px;background:#E2E8F0;border-radius:3px;margin-bottom:7px;overflow:hidden}
+.lv-card-minibar-fill{height:100%;border-radius:3px}
+.lv-card-delta{font-size:15px;font-weight:700;line-height:1}
+.lv-card-dlabel{font-size:9px;text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+.lv-stats{display:flex;gap:0;background:#1E3A5F;border-radius:8px;overflow:hidden;margin-bottom:16px}
+.lv-stat{flex:1;padding:12px 8px;text-align:center;border-right:1px solid #0F2544}
+.lv-stat:last-child{border-right:none}
+.lv-stat-val{font-size:20px;font-weight:700;color:#fff;line-height:1}
+.lv-stat-lbl{font-size:9px;color:#64748B;text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div>
+    <div class="hdr-title">AAR Programs of Work</div>
+    <div class="hdr-sub">Timeline &amp; Resource Manager · May – Dec 2026</div>
+  </div>
+  <div class="hdr-actions">
+    <span id="syncBadge" style="font-size:11px;font-weight:600;color:#94A3B8;white-space:nowrap;padding:4px 10px;border:1px solid #334155;border-radius:5px;cursor:default" title="Cloud sync status">☁ Local only</span>
+    <div class="view-tabs">
+      <button class="vtab active" onclick="setView('stream',this)">By Stream</button>
+      <button class="vtab" onclick="setView('squad',this)">By Squad</button>
+      <button class="vtab" onclick="setView('status',this)">By Status</button>
+      <button class="vtab" onclick="setView('resources',this)">📊 Resources</button>
+      <button class="vtab" onclick="setView('levelling',this)">⚖ Levelling</button>
+    </div>
+    <button class="btn btn-ghost" id="shareBtn" onclick="copyShareUrl(false)" title="Copy shareable link">🔗 Share</button>
+    <button class="btn btn-ghost" onclick="openCloudModal()" title="Set up cloud sync so your team can collaborate">☁ Cloud Sync</button>
+    <button class="btn btn-ghost" onclick="exportJSON()">Export JSON</button>
+    <button class="btn btn-primary" onclick="openModal()">+ Add Project</button>
+  </div>
+</div>
+
+<div class="stats" id="statsBar"></div>
+
+<div class="controls">
+  <span class="ctrl-label">Stream</span>
+  <select id="fStream" onchange="render()">
+    <option value="">All</option>
+    <option value="reg">Regulatory</option>
+    <option value="nonreg">Non-Reg</option>
+    <option value="gps">GPS</option>
+    <option value="bau">BAU</option>
+  </select>
+  <span class="ctrl-label">Status</span>
+  <select id="fStatus" onchange="render()">
+    <option value="">All</option>
+    <option value="active">Active</option>
+    <option value="planning">Planning</option>
+    <option value="tbd">TBD</option>
+    <option value="completed">Completed</option>
+  </select>
+  <span class="ctrl-label">Squad</span>
+  <select id="fSquad" onchange="render()">
+    <option value="">All</option>
+    <option value="reg-squad">Reg Squad</option>
+    <option value="nonreg-squad">Non-Reg Squad</option>
+  </select>
+  <div class="ctrl-sep"></div>
+  <input type="search" id="fSearch" placeholder="Search projects…" oninput="render()">
+  <div class="controls-right">
+    <div class="legend">
+      <div class="leg"><div class="leg-sw" style="background:#DC2626"></div>Regulatory</div>
+      <div class="leg"><div class="leg-sw" style="background:#7C3AED"></div>Non-Reg</div>
+      <div class="leg"><div class="leg-sw" style="background:#1D4ED8"></div>GPS</div>
+      <div class="leg"><div class="leg-sw" style="background:#0369A1"></div>BAU</div>
+      <div class="leg"><div class="leg-sw" style="background:#EF4444;width:3px;border-radius:1px"></div>Today</div>
+    </div>
+  </div>
+</div>
+
+<div class="main" id="ganttMain">
+  <div class="gantt-card" id="gantt"></div>
+</div>
+
+<!-- ── Resource View ── -->
+<div id="resView" style="display:none;padding:16px 24px 40px">
+
+  <!-- Sub-tabs -->
+  <div style="display:flex;gap:0;background:#F1F5F9;border-radius:6px;padding:2px;width:fit-content;margin-bottom:16px">
+    <button class="rstab active" onclick="setResSub('role',this)">By Role (SE / TA)</button>
+    <button class="rstab" onclick="setResSub('squad',this)">Reg vs Non-Reg</button>
+  </div>
+
+  <!-- Chart card -->
+  <div class="res-card">
+    <div class="res-card-title">
+      Monthly Resource Demand
+      <span class="res-hint">Derived live from your projects · click a bar to see which programs drive that month's need</span>
+    </div>
+    <div id="resChartWrap" style="padding-bottom:4px"></div>
+    <div class="res-legend" id="resLegend"></div>
+  </div>
+
+  <!-- Drill-down (hidden until bar clicked) -->
+  <div id="resDrilldown" style="display:none"></div>
+
+  <!-- Squad capacity model (collapsed by default) -->
+  <div class="res-card" style="padding-bottom:0">
+    <div class="res-card-title" style="cursor:pointer;user-select:none;margin-bottom:0;padding-bottom:16px" onclick="toggleSquadModel()">
+      Squad Capacity Model
+      <span class="res-hint">Slide committed squad size to see coverage gaps — dashed lines appear on the chart above</span>
+      <span id="sqToggleBtn" style="margin-left:auto;font-size:11px;font-weight:600;color:#0D9488;white-space:nowrap;text-transform:none;letter-spacing:0">▼ Show</span>
+    </div>
+    <div id="squadModel" style="display:none;padding-bottom:16px"></div>
+  </div>
+</div>
+
+<!-- ── Resource Levelling View ── -->
+<div id="lvView" style="display:none;padding:16px 24px 40px">
+
+  <!-- Sub-tabs -->
+  <div style="display:flex;gap:0;background:#F1F5F9;border-radius:7px;padding:3px;width:fit-content;margin-bottom:16px">
+    <button class="lvtab active" onclick="setLvSub('combined',this)">Combined</button>
+    <button class="lvtab" onclick="setLvSub('reg',this)">Regulatory</button>
+    <button class="lvtab" onclick="setLvSub('nonreg',this)">Non-Reg / GPS</button>
+  </div>
+
+  <!-- Stats strip -->
+  <div class="lv-stats" id="lvStats"></div>
+
+  <!-- Chart + Slider -->
+  <div class="res-card">
+    <div class="res-card-title">Resource Demand vs Capacity
+      <span class="res-hint">🔵 within capacity &nbsp; 🔴 over capacity &nbsp; drag the slider to level your squad size</span>
+    </div>
+    <div id="lvChartWrap"></div>
+    <div class="lv-slider-wrap">
+      <span style="font-size:12px;font-weight:700;color:#64748B;white-space:nowrap">Squad Capacity</span>
+      <input type="range" id="lvSlider" min="1" max="20" value="8"
+        oninput="lvCap[lvSub]=+this.value;document.getElementById('lvCapVal').textContent=this.value;renderLvView()">
+      <div>
+        <div class="lv-cap-val" id="lvCapVal">8</div>
+        <div style="font-size:10px;color:#94A3B8;text-align:right">FTE</div>
+      </div>
+    </div>
+    <div class="lv-legend">
+      <span><span class="res-leg-dot" style="background:#0369A1"></span>Within capacity</span>
+      <span><span class="res-leg-dot" style="background:#DC2626"></span>Over capacity (shortfall)</span>
+      <span><span class="res-leg-dot" style="background:#F59E0B;height:3px;border-radius:0;vertical-align:middle"></span> — Capacity line</span>
+      <span><span class="res-leg-dot" style="background:#F0FDF4;border:1px solid #BBF7D0"></span>Surplus zone</span>
+    </div>
+  </div>
+
+  <!-- Month cards -->
+  <div class="lv-cards" id="lvCards"></div>
+
+</div>
+
+<!-- ── Cloud Sync Modal ── -->
+<div class="mo" id="moCloud" onclick="bgClose(event,'moCloud')">
+  <div class="mo-box mo-box-sm">
+    <div class="mo-head">
+      <span class="mo-title" id="moCloudTitle">☁ Enable Cloud Sync</span>
+      <button class="mo-close" onclick="closeModal('moCloud')">×</button>
+    </div>
+    <div class="mo-body">
+
+      <!-- Active state: already synced -->
+      <div id="cloudActivePanel" style="display:none">
+        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:14px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:700;color:#16A34A;margin-bottom:4px">✓ Cloud sync is active</div>
+          <div style="font-size:12px;color:#374151;line-height:1.6">Your data is synced to a <strong>GitHub Gist</strong> in your account. Share the URL below with your team — anyone with the link can view and edit.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <input id="shareUrlInput" class="fi" type="text" readonly style="flex:1;font-size:11px;background:#F8FAFC;color:#374151;cursor:text">
+          <button class="btn btn-primary" onclick="copyShareUrl(false)">Copy</button>
+        </div>
+        <div style="font-size:11px;color:#94A3B8;line-height:1.6">Changes auto-save within ~1 second. Team members need to <strong>refresh the page</strong> to pick up each other's edits.</div>
+      </div>
+
+      <!-- Setup state: first-time configuration -->
+      <div id="cloudSetupPanel">
+        <p style="font-size:13px;color:#374151;margin-bottom:14px;line-height:1.6">
+          Enable cloud sync so your whole team views and edits the same live data.
+          Your data is stored in a <strong>GitHub Gist</strong> — it lives in your own GitHub account, is version-controlled, and never touches a third-party server.
+        </p>
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:14px;margin-bottom:16px">
+          <ol style="font-size:12px;color:#374151;margin:0 0 0 16px;line-height:2.4">
+            <li>Open <a href="https://github.com/settings/tokens/new?scopes=gist&description=AAR+Timeline+Manager" target="_blank" style="color:#0D9488;font-weight:600">GitHub → Settings → Developer settings → Personal access tokens (classic)</a></li>
+            <li>Tick only the <strong>gist</strong> scope, set an expiry, click Generate</li>
+            <li>Copy the token (starts with <code style="background:#F1F5F9;padding:1px 5px;border-radius:3px;font-size:11px">ghp_</code>) and paste below</li>
+          </ol>
+        </div>
+        <div class="fg">
+          <label class="fl">GitHub Personal Access Token <span class="req">*</span></label>
+          <input class="fi" type="password" id="cloudKey" placeholder="ghp_…" autocomplete="off">
+          <div class="fhint">Needs "gist" scope only — stored in the URL hash, never sent to any third-party server</div>
+        </div>
+        <div id="cloudSetupStatus" style="font-size:12px;margin-top:8px;min-height:18px;font-weight:600"></div>
+      </div>
+
+    </div>
+    <div class="mo-foot">
+      <button class="btn btn-ghost" onclick="closeModal('moCloud')">Close</button>
+      <div id="cloudSetupFooter" class="mo-foot-r">
+        <button class="btn btn-primary" onclick="setupCloud()">Enable Cloud Sync →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<!-- ── Project modal ── -->
+<div class="mo" id="mo" onclick="bgClose(event,'mo')">
+  <div class="mo-box">
+    <div class="mo-head">
+      <span class="mo-title" id="moTitle">Add Project</span>
+      <button class="mo-close" onclick="closeModal('mo')">×</button>
+    </div>
+    <div class="mo-body">
+      <input type="hidden" id="moId">
+      <div class="fg">
+        <label class="fl">Project name <span class="req">*</span></label>
+        <input class="fi" type="text" id="moName" placeholder="e.g. FTA Phase 3">
+      </div>
+      <div class="frow">
+        <div class="fg">
+          <label class="fl">Stream <span class="req">*</span></label>
+          <select class="fi" id="moStream">
+            <option value="reg">Regulatory</option>
+            <option value="nonreg">Non-Regulatory</option>
+            <option value="gps">GPS</option>
+            <option value="bau">BAU</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="fl">Status</label>
+          <select class="fi" id="moStatus">
+            <option value="active">Active</option>
+            <option value="planning">Planning</option>
+            <option value="tbd">TBD</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow">
+        <div class="fg">
+          <label class="fl">Start date</label>
+          <input class="fi" type="date" id="moStart" min="2026-01-01" max="2026-12-31">
+          <div class="fhint">Leave blank if TBD</div>
+        </div>
+        <div class="fg">
+          <label class="fl">End date</label>
+          <input class="fi" type="date" id="moEnd" min="2026-01-01" max="2026-12-31">
+        </div>
+      </div>
+      <div class="frow">
+        <div class="fg">
+          <label class="fl">Resources (FTEs)</label>
+          <input class="fi" type="number" id="moRes" min="0" max="30" placeholder="0">
+        </div>
+        <div class="fg">
+          <label class="fl">Squad</label>
+          <select class="fi" id="moSquad">
+            <option value="">— unassigned —</option>
+            <option value="reg-squad">Regulatory Squad</option>
+            <option value="nonreg-squad">Non-Reg / GPS Squad</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Key milestone</label>
+        <input class="fi" type="text" id="moMilestone" placeholder="e.g. SIT complete 30 Jun">
+      </div>
+      <div class="fg">
+        <label class="fl">Notes</label>
+        <textarea class="fi" id="moNotes" rows="2" style="resize:vertical" placeholder="Dependencies, risks, customer impact…"></textarea>
+      </div>
+
+      <!-- Phases section -->
+      <div class="phases-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <label class="fl" style="margin:0">Phases</label>
+          <button class="btn btn-teal" onclick="openPhaseModal(null,null)">+ Add Phase</button>
+        </div>
+        <div class="fhint" style="margin-bottom:8px">Break down this project into SD, Dev, SIT, UAT etc. Each phase appears as a sub-bar on the Gantt.</div>
+        <div id="phaseChipList"></div>
+      </div>
+    </div>
+    <div class="mo-foot">
+      <button class="btn btn-danger btn-sm" id="moDelete" onclick="deleteProj()" style="display:none">Delete project</button>
+      <div class="mo-foot-r">
+        <button class="btn btn-ghost" onclick="closeModal('mo')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveProj()">Save project</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Phase modal ── -->
+<div class="mo" id="mop" onclick="bgClose(event,'mop')">
+  <div class="mo-box mo-box-sm">
+    <div class="mo-head">
+      <span class="mo-title" id="mopTitle">Add Phase</span>
+      <button class="mo-close" onclick="closeModal('mop')">×</button>
+    </div>
+    <div class="mo-body">
+      <input type="hidden" id="mopProjId">
+      <input type="hidden" id="mopPhaseId">
+      <div class="frow">
+        <div class="fg">
+          <label class="fl">Phase type <span class="req">*</span></label>
+          <select class="fi" id="mopType" onchange="onPhaseTypeChange()">
+            <option value="sd">Solution Design (SD)</option>
+            <option value="dev">Development (DEV)</option>
+            <option value="sit">System Integration Testing (SIT)</option>
+            <option value="uat">User Acceptance Testing (UAT)</option>
+            <option value="golive">Go-Live / Deployment</option>
+            <option value="planning">Planning</option>
+            <option value="review">Review / Sign-off</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="fl">Label (shown on bar)</label>
+          <input class="fi" type="text" id="mopName" placeholder="e.g. DEV Sprint 1">
+        </div>
+      </div>
+      <div class="frow">
+        <div class="fg">
+          <label class="fl">Start date</label>
+          <input class="fi" type="date" id="mopStart" min="2026-01-01" max="2026-12-31">
+          <div class="fhint">Leave blank = TBD</div>
+        </div>
+        <div class="fg">
+          <label class="fl">End date</label>
+          <input class="fi" type="date" id="mopEnd" min="2026-01-01" max="2026-12-31">
+        </div>
+      </div>
+      <div class="frow">
+        <div class="fg">
+          <label class="fl">SE FTEs</label>
+          <input class="fi" type="number" id="mopSeFte" min="0" max="10" step="0.5" placeholder="0">
+          <div class="fhint">Software Engineers on this phase</div>
+        </div>
+        <div class="fg">
+          <label class="fl">TA FTEs</label>
+          <input class="fi" type="number" id="mopTaFte" min="0" max="10" step="0.5" placeholder="0">
+          <div class="fhint">Test Analysts on this phase</div>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Colour</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="colorPicker"></div>
+      </div>
+      <div class="fg">
+        <label class="fl">Notes</label>
+        <input class="fi" type="text" id="mopNotes" placeholder="Exit criteria, owner, link…">
+      </div>
+    </div>
+    <div class="mo-foot">
+      <button class="btn btn-danger btn-sm" id="mopDelete" onclick="deletePhase()" style="display:none">Delete phase</button>
+      <div class="mo-foot-r">
+        <button class="btn btn-ghost" onclick="closeModal('mop')">Cancel</button>
+        <button class="btn btn-primary" onclick="savePhase()">Save phase</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Phase type definitions ────────────────────────────────────────────────────
+const PT = {
+  sd:       { label:'SD',       color:'#7C3AED', full:'Solution Design' },
+  dev:      { label:'DEV',      color:'#1D4ED8', full:'Development' },
+  sit:      { label:'SIT',      color:'#D97706', full:'SIT' },
+  uat:      { label:'UAT',      color:'#0D9488', full:'UAT' },
+  golive:   { label:'Go-Live',  color:'#16A34A', full:'Go-Live' },
+  planning: { label:'Plan',     color:'#64748B', full:'Planning' },
+  review:   { label:'Review',   color:'#DB2777', full:'Review' },
+  custom:   { label:'Custom',   color:'#F59E0B', full:'Custom' },
+};
+const PALETTE = ['#7C3AED','#1D4ED8','#D97706','#0D9488','#16A34A','#DC2626','#DB2777','#0369A1','#64748B','#F59E0B'];
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const GCOLS  = ['May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const GSTART = new Date('2026-05-01');
+const GEND   = new Date('2026-12-31');
+const GTOTAL = (GEND - GSTART) / 86400000 + 1;
+const TODAY  = '2026-05-21';
+const SCOL = { reg:'#DC2626', nonreg:'#7C3AED', gps:'#1D4ED8', bau:'#0369A1' };
+const SLBL = { reg:'Regulatory', nonreg:'Non-Reg', gps:'GPS', bau:'BAU' };
+const STLBL = { active:'Active', planning:'Planning', tbd:'TBD', completed:'Completed' };
+
+// ─── Default data ─────────────────────────────────────────────────────────────
+const DEFAULTS = [
+  {id:1,  name:'FTA — May Drop (Type 9)',             stream:'reg',    status:'active',   startDate:'2026-05-08', endDate:'2026-06-18', resources:3, squad:'reg-squad',    milestone:'1 Jul release gate', notes:'SIT underway. UAT target mid-June.',
+   phases:[
+    {id:101,type:'sd',    name:'SD',     color:'#7C3AED', startDate:'2026-05-08', endDate:'2026-05-14', seFte:1,   taFte:0,   notes:''},
+    {id:102,type:'dev',   name:'DEV',    color:'#1D4ED8', startDate:'2026-05-15', endDate:'2026-05-29', seFte:0.5, taFte:0,   notes:''},
+    {id:103,type:'sit',   name:'SIT',    color:'#D97706', startDate:'2026-06-01', endDate:'2026-06-10', seFte:0.5, taFte:0.5, notes:''},
+    {id:104,type:'uat',   name:'UAT',    color:'#0D9488', startDate:'2026-06-11', endDate:'2026-06-18', seFte:0.5, taFte:0.5, notes:'Customer sign-off required'},
+  ]},
+  {id:2,  name:'FTA — Nov Drop (Type 8)',              stream:'reg',    status:'planning', startDate:'2026-06-01', endDate:'2026-10-30', resources:3, squad:'reg-squad',    milestone:'November regulatory drop', notes:'Architecture confirmed; dev starts June.',
+   phases:[
+    {id:201,type:'sd',    name:'SD',     color:'#7C3AED', startDate:'2026-06-01', endDate:'2026-06-20', seFte:1,   taFte:0,   notes:''},
+    {id:202,type:'dev',   name:'DEV',    color:'#1D4ED8', startDate:'2026-07-01', endDate:'2026-08-31', seFte:2,   taFte:0,   notes:''},
+    {id:203,type:'sit',   name:'SIT',    color:'#D97706', startDate:'2026-09-01', endDate:'2026-09-25', seFte:0.5, taFte:0.5, notes:''},
+    {id:204,type:'uat',   name:'UAT',    color:'#0D9488', startDate:'2026-10-01', endDate:'2026-10-25', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+  {id:3,  name:'Bowen Regulatory — June Drop',        stream:'reg',    status:'active',   startDate:'2026-05-08', endDate:'2026-06-29', resources:3, squad:'reg-squad',    milestone:'June regulatory gate', notes:'Code complete; SIT starting.',
+   phases:[
+    {id:301,type:'dev',   name:'DEV',    color:'#1D4ED8', startDate:'2026-05-08', endDate:'2026-05-28', seFte:2,   taFte:0,   notes:''},
+    {id:302,type:'sit',   name:'SIT',    color:'#D97706', startDate:'2026-05-29', endDate:'2026-06-14', seFte:0.5, taFte:1.5, notes:''},
+    {id:303,type:'uat',   name:'UAT',    color:'#0D9488', startDate:'2026-06-15', endDate:'2026-06-29', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+  {id:4,  name:'Bowen Regulatory — Dec Drop',         stream:'reg',    status:'planning', startDate:'2026-07-02', endDate:'2026-10-21', resources:2, squad:'reg-squad',    milestone:'December delivery', notes:'Backlog grooming in progress.',
+   phases:[
+    {id:401,type:'sd',    name:'SD',     color:'#7C3AED', startDate:'2026-07-02', endDate:'2026-07-20', seFte:1,   taFte:0,   notes:''},
+    {id:402,type:'dev',   name:'DEV',    color:'#1D4ED8', startDate:'2026-07-21', endDate:'2026-09-10', seFte:2,   taFte:0,   notes:''},
+    {id:403,type:'sit',   name:'SIT',    color:'#D97706', startDate:'2026-09-11', endDate:'2026-09-30', seFte:0.5, taFte:1.5, notes:''},
+    {id:404,type:'uat',   name:'UAT',    color:'#0D9488', startDate:'2026-10-01', endDate:'2026-10-21', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+  {id:5,  name:'NSW Social Programs — Core Code',     stream:'reg',    status:'active',   startDate:'2026-05-08', endDate:'2026-06-15', resources:2, squad:'reg-squad',    milestone:'June cut-off', notes:'On track.',
+   phases:[
+    {id:501,type:'dev',   name:'DEV',    color:'#1D4ED8', startDate:'2026-05-08', endDate:'2026-05-25', seFte:2,   taFte:0,   notes:''},
+    {id:502,type:'sit',   name:'SIT',    color:'#D97706', startDate:'2026-05-26', endDate:'2026-06-07', seFte:0.5, taFte:0.5, notes:''},
+    {id:503,type:'uat',   name:'UAT',    color:'#0D9488', startDate:'2026-06-08', endDate:'2026-06-15', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+  {id:6,  name:'REMP Schema Change to r47',           stream:'reg',    status:'active',   startDate:'2026-05-18', endDate:'2026-06-30', resources:1, squad:'reg-squad',    milestone:'Migration w/c 18 May', notes:'Schema migration scheduled.',
+   phases:[
+    {id:601,type:'dev',   name:'DEV',    color:'#1D4ED8', startDate:'2026-05-18', endDate:'2026-06-05', seFte:2,   taFte:0,   notes:''},
+    {id:602,type:'sit',   name:'Testing',color:'#D97706', startDate:'2026-06-06', endDate:'2026-06-20', seFte:0.5, taFte:1.5, notes:''},
+    {id:603,type:'golive',name:'Go-Live',color:'#16A34A', startDate:'2026-06-23', endDate:'2026-06-30', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+  {id:7,  name:'GAS B2B',                             stream:'reg',    status:'tbd',      startDate:'',           endDate:'',           resources:0, squad:'reg-squad',    milestone:'Dates TBC',            notes:'Scope and dates being confirmed.', phases:[]},
+  {id:8,  name:'ICON Water — Class A Metering',       stream:'reg',    status:'active',   startDate:'2026-05-01', endDate:'2026-10-31', resources:1, squad:'reg-squad',    milestone:'Milestone Jul 2026',   notes:'Long-running dedicated project.',
+   phases:[
+    {id:801,type:'sd',    name:'SD',     color:'#7C3AED', startDate:'2026-05-01', endDate:'2026-05-31', seFte:1,   taFte:0,   notes:''},
+    {id:802,type:'dev',   name:'DEV',    color:'#1D4ED8', startDate:'2026-06-01', endDate:'2026-08-31', seFte:1,   taFte:0,   notes:''},
+    {id:803,type:'uat',   name:'UAT',    color:'#0D9488', startDate:'2026-09-01', endDate:'2026-10-15', seFte:0.5, taFte:0.5, notes:''},
+    {id:804,type:'golive',name:'Go-Live',color:'#16A34A', startDate:'2026-10-16', endDate:'2026-10-31', seFte:0,   taFte:0,   notes:''},
+  ]},
+  {id:9,  name:'Technical Activity (BAU)',             stream:'bau',    status:'active',   startDate:'2026-05-01', endDate:'2026-10-31', resources:2, squad:'nonreg-squad', milestone:'Continuous delivery', notes:'Ongoing.',
+   phases:[
+    {id:901,type:'custom',name:'Sprints',color:'#0369A1',startDate:'2026-05-01', endDate:'2026-10-31', seFte:1, taFte:1, notes:'Sprint 51–71'},
+  ]},
+  {id:10, name:'CRM Acquisitions APIs',                stream:'nonreg', status:'tbd',      startDate:'',           endDate:'',           resources:0, squad:'nonreg-squad', milestone:'Business case pending', notes:'', phases:[]},
+  {id:11, name:'Mobile App Phase 2',                   stream:'nonreg', status:'active',   startDate:'2026-05-18', endDate:'2026-08-31', resources:2, squad:'nonreg-squad', milestone:'Sprint 53 milestone', notes:'On track.',
+   phases:[
+    {id:1101,type:'sd',   name:'SD',     color:'#7C3AED', startDate:'2026-05-18', endDate:'2026-06-05', seFte:1,   taFte:0,   notes:''},
+    {id:1102,type:'dev',  name:'DEV',    color:'#1D4ED8', startDate:'2026-06-06', endDate:'2026-07-31', seFte:2,   taFte:0,   notes:''},
+    {id:1103,type:'sit',  name:'SIT',    color:'#D97706', startDate:'2026-08-01', endDate:'2026-08-16', seFte:0.5, taFte:0.5, notes:''},
+    {id:1104,type:'uat',  name:'UAT',    color:'#0D9488', startDate:'2026-08-17', endDate:'2026-08-31', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+  {id:12, name:'ASMD Non-Reg PBISs (Drop 4)',          stream:'nonreg', status:'tbd',      startDate:'',           endDate:'',           resources:0, squad:'nonreg-squad', milestone:'Pending capacity', notes:'', phases:[]},
+  {id:13, name:'2.1 GPS — Automated Self Reads',      stream:'gps',    status:'tbd',      startDate:'',           endDate:'',           resources:0, squad:'nonreg-squad', milestone:'Dates TBC', notes:'', phases:[]},
+  {id:14, name:'2.3 GPS — Automate PMD Requests',     stream:'gps',    status:'active',   startDate:'2026-05-18', endDate:'2026-06-30', resources:1, squad:'nonreg-squad', milestone:'UAT prep underway', notes:'',
+   phases:[
+    {id:1401,type:'dev',  name:'DEV',    color:'#1D4ED8', startDate:'2026-05-18', endDate:'2026-06-10', seFte:1,   taFte:0,   notes:''},
+    {id:1402,type:'uat',  name:'UAT',    color:'#0D9488', startDate:'2026-06-11', endDate:'2026-06-30', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+  {id:15, name:'2.4 GPS — Data Integrity Queues',     stream:'gps',    status:'active',   startDate:'2026-05-18', endDate:'2026-08-28', resources:2, squad:'nonreg-squad', milestone:'Dev 80% complete', notes:'',
+   phases:[
+    {id:1501,type:'dev',  name:'DEV',    color:'#1D4ED8', startDate:'2026-05-18', endDate:'2026-07-15', seFte:1,   taFte:0,   notes:''},
+    {id:1502,type:'sit',  name:'SIT',    color:'#D97706', startDate:'2026-07-16', endDate:'2026-08-05', seFte:0.5, taFte:1,   notes:''},
+    {id:1503,type:'uat',  name:'UAT',    color:'#0D9488', startDate:'2026-08-06', endDate:'2026-08-28', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+  {id:16, name:'2.6 GPS — High Low Validations',      stream:'gps',    status:'active',   startDate:'2026-05-18', endDate:'2026-08-28', resources:1, squad:'nonreg-squad', milestone:'Integration testing', notes:'',
+   phases:[
+    {id:1601,type:'dev',  name:'DEV',    color:'#1D4ED8', startDate:'2026-05-18', endDate:'2026-07-15', seFte:1,   taFte:0,   notes:''},
+    {id:1602,type:'sit',  name:'SIT',    color:'#D97706', startDate:'2026-07-16', endDate:'2026-08-05', seFte:0.5, taFte:0.5, notes:''},
+    {id:1603,type:'uat',  name:'UAT',    color:'#0D9488', startDate:'2026-08-06', endDate:'2026-08-28', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+  {id:17, name:'3.5 GPS — Customer Classification',   stream:'gps',    status:'planning', startDate:'2026-06-30', endDate:'2026-10-30', resources:2, squad:'nonreg-squad', milestone:'Starts Jul post-reg peak', notes:'',
+   phases:[
+    {id:1701,type:'sd',   name:'SD',     color:'#7C3AED', startDate:'2026-06-30', endDate:'2026-07-20', seFte:1,   taFte:0,   notes:''},
+    {id:1702,type:'dev',  name:'DEV',    color:'#1D4ED8', startDate:'2026-07-21', endDate:'2026-09-15', seFte:1,   taFte:0,   notes:''},
+    {id:1703,type:'uat',  name:'UAT',    color:'#0D9488', startDate:'2026-09-16', endDate:'2026-10-20', seFte:0.5, taFte:0.5, notes:''},
+    {id:1704,type:'golive',name:'Go-Live',color:'#16A34A',startDate:'2026-10-21', endDate:'2026-10-30', seFte:0,   taFte:0,   notes:''},
+  ]},
+  {id:18, name:'4.2.1 GPS — Auth Dispatch & Signing', stream:'gps',    status:'active',   startDate:'2026-05-18', endDate:'2026-08-28', resources:1, squad:'nonreg-squad', milestone:'Security review scheduled', notes:'',
+   phases:[
+    {id:1801,type:'dev',  name:'DEV',    color:'#1D4ED8', startDate:'2026-05-18', endDate:'2026-07-10', seFte:1,   taFte:0,   notes:''},
+    {id:1802,type:'sit',  name:'SIT',    color:'#D97706', startDate:'2026-07-11', endDate:'2026-08-01', seFte:0.5, taFte:0.5, notes:''},
+    {id:1803,type:'uat',  name:'UAT',    color:'#0D9488', startDate:'2026-08-02', endDate:'2026-08-28', seFte:0.5, taFte:0.5, notes:''},
+  ]},
+];
+
+let projects  = JSON.parse(localStorage.getItem('aar_projs') || 'null') || DEFAULTS.map(p=>({...p, phases:[...(p.phases||[])]}));
+
+// ── Migration: backfill seFte/taFte on phases that predate those fields ────────
+function migrateProjects() {
+  projects.forEach(p => {
+    const defProj = DEFAULTS.find(d => d.id === p.id);
+    (p.phases || []).forEach(ph => {
+      if (ph.seFte == null || ph.taFte == null) {
+        const defPh = defProj ? (defProj.phases || []).find(d => d.id === ph.id) : null;
+        if (ph.seFte == null) ph.seFte = defPh ? (defPh.seFte || 0) : 0;
+        if (ph.taFte == null) ph.taFte = defPh ? (defPh.taFte || 0) : 0;
+      }
+    });
+  });
+}
+migrateProjects();
+
+let nextProjId  = Math.max(...projects.map(p=>p.id), 18) + 1;
+let nextPhaseId = 9000;
+let viewMode  = 'stream';
+const expanded = new Set(); // project IDs that are expanded to show phases
+
+function persist() {
+  localStorage.setItem('aar_projs', JSON.stringify(projects));
+  // Cloud save — debounced 1.2s so rapid edits only trigger one request
+  if (!binId || !masterKey) return;
+  clearTimeout(cloudTimer);
+  setSyncBadge('saving');
+  cloudTimer = setTimeout(async () => {
+    try {
+      let r;
+      if (backendType === 'gist') {
+        r = await fetch(`${GITHUB_API}/gists/${binId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${masterKey}`,
+            'Accept': 'application/vnd.github+json'
+          },
+          body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(projects, null, 2) } } })
+        });
+      } else {
+        // Legacy JSONbin
+        r = await fetch(`${JBIN_URL}/${binId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Key': masterKey },
+          body: JSON.stringify(projects)
+        });
+      }
+      setSyncBadge(r.ok ? 'ready' : 'error');
+    } catch { setSyncBadge('error'); }
+  }, 1200);
+}
+
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+function pct(dateStr) {
+  if (!dateStr) return null;
+  const diff = (new Date(dateStr) - GSTART) / 86400000;
+  return Math.max(0, Math.min(100, diff / GTOTAL * 100));
+}
+function fmtDate(d) { return d ? d.slice(0,7).replace('-','/') : 'TBD'; }
+
+// ─── Filter ───────────────────────────────────────────────────────────────────
+function filtered() {
+  const s  = document.getElementById('fStream').value;
+  const st = document.getElementById('fStatus').value;
+  const sq = document.getElementById('fSquad').value;
+  const q  = document.getElementById('fSearch').value.toLowerCase();
+  return projects.filter(p =>
+    (!s  || p.stream === s) &&
+    (!st || p.status === st) &&
+    (!sq || p.squad  === sq) &&
+    (!q  || p.name.toLowerCase().includes(q))
+  );
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+function renderStats() {
+  const ps = projects;
+  document.getElementById('statsBar').innerHTML = [
+    {v:ps.length, l:'Total Projects', cls:''},
+    {v:ps.filter(p=>p.status==='active').length, l:'Active', cls:'teal'},
+    {v:ps.filter(p=>p.status==='planning').length, l:'Planning', cls:'amber'},
+    {v:ps.filter(p=>p.status==='tbd').length, l:'TBD', cls:''},
+    {v:ps.filter(p=>p.status==='completed').length, l:'Completed', cls:'teal'},
+    {v:ps.reduce((s,p)=>s+(p.resources||0),0), l:'Total FTEs', cls:'amber'},
+  ].map(s=>`<div class="stat"><div class="stat-val ${s.cls}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
+}
+
+// ─── Gantt rows ────────────────────────────────────────────────────────────────
+function colLinesHtml() {
+  return `<div class="col-lines">${GCOLS.map(()=>`<div class="col-line"></div>`).join('')}</div>`;
+}
+
+function mainBarHtml(p) {
+  const tbd = !p.startDate || !p.endDate;
+  const col  = SCOL[p.stream];
+  const todayX = pct(TODAY);
+  const todayEl = `<div class="today-line" style="left:${todayX.toFixed(2)}%;background:#EF4444"></div>`;
+  if (tbd) {
+    return `${colLinesHtml()}${todayEl}
+    <div class="g-bar g-bar-tbd" style="left:1%;width:15%;border-color:${col}"
+      onmouseenter="showTip(event,${p.id})" onmouseleave="hideTip()" onclick="openModal(${p.id})"></div>`;
+  }
+  const x1 = pct(p.startDate), x2 = pct(p.endDate);
+  const w  = Math.max(0.6, x2 - x1);
+  const lbl = p.name.split('—').pop().split('GPS — ').pop().trim();
+  return `${colLinesHtml()}${todayEl}
+  <div class="g-bar" style="left:${x1.toFixed(2)}%;width:${w.toFixed(2)}%;background:${col}"
+    onmouseenter="showTip(event,${p.id})" onmouseleave="hideTip()" onclick="openModal(${p.id})">
+    <span class="g-bar-lbl">${lbl}</span>
+  </div>`;
+}
+
+function phaseBarHtml(ph, projId) {
+  const todayX = pct(TODAY);
+  const todayEl = `<div class="today-line" style="left:${todayX.toFixed(2)}%;background:#EF4444;opacity:.5"></div>`;
+  const tbd = !ph.startDate || !ph.endDate;
+  let bar = '';
+  // Build resource suffix for bar label
+  const resParts = [];
+  if (ph.seFte) resParts.push(`${ph.seFte}SE`);
+  if (ph.taFte) resParts.push(`${ph.taFte}TA`);
+  const resStr = resParts.length ? ` · ${resParts.join(' ')}` : '';
+
+  if (tbd) {
+    bar = `<div class="g-pbar g-pbar-tbd" style="left:1%;width:14%;border-color:${ph.color}"
+      onclick="openPhaseModal(${projId},${ph.id})" title="TBD"></div>`;
+  } else {
+    const x1 = pct(ph.startDate), x2 = pct(ph.endDate);
+    const w  = Math.max(0.5, x2 - x1);
+    bar = `<div class="g-pbar" style="left:${x1.toFixed(2)}%;width:${w.toFixed(2)}%;background:${ph.color}"
+      onmouseenter="showPhaseTip(event,${projId},${ph.id})" onmouseleave="hideTip()"
+      onclick="openPhaseModal(${projId},${ph.id})">
+      <span class="g-pbar-lbl">${ph.name}${resStr}</span>
+    </div>`;
+  }
+  return `<div class="col-lines">${GCOLS.map(()=>`<div class="col-line" style="border-color:#EEF5F0"></div>`).join('')}</div>${todayEl}${bar}`;
+}
+
+function ganttRow(p) {
+  const hasPhases = (p.phases||[]).length > 0;
+  const isExp = expanded.has(p.id);
+  const expandIcon = isExp ? '▼' : '▶';
+  const expandCls  = hasPhases ? 'has-phases' : '';
+  const phaseCnt   = hasPhases ? `<span class="phase-count">${p.phases.length}</span>` : '';
+
+  let html = `<div class="g-row">
+    <div class="g-info">
+      <button class="expand-btn ${expandCls}" onclick="toggleExpand(event,${p.id})" title="${hasPhases?'Show/hide phases':'No phases yet'}">${expandIcon}</button>
+      ${phaseCnt}
+      <div class="sdot sd-${p.status}"></div>
+      <span class="sbadge sb-${p.stream}">${SLBL[p.stream]}</span>
+      <span class="pname ${!p.startDate&&!p.endDate?'pname-tbd':''}" title="${p.name}">${p.name}</span>
+      ${p.resources ? `<span class="res-pill">${p.resources} FTE</span>` : ''}
+      <span class="edit-hint" onclick="openModal(${p.id})">✎</span>
+    </div>
+    <div class="g-bars">${mainBarHtml(p)}</div>
+  </div>`;
+
+  if (isExp) {
+    const phases = p.phases || [];
+    if (phases.length === 0) {
+      html += `<div class="g-add-phase-row">
+        <button class="g-add-phase-btn" onclick="openPhaseModal(${p.id},null)">＋ Add first phase (SD, DEV, SIT, UAT…)</button>
+        <div class="g-add-phase-spacer"></div>
+      </div>`;
+    } else {
+      phases.forEach(ph => {
+        const dot = `<span style="width:8px;height:8px;border-radius:2px;background:${ph.color};display:inline-block;flex-shrink:0"></span>`;
+        // Resource pill: show SE and/or TA if set
+        const resParts = [];
+        if (ph.seFte) resParts.push(`${ph.seFte} SE`);
+        if (ph.taFte) resParts.push(`${ph.taFte} TA`);
+        const resPill = resParts.length
+          ? `<span style="font-size:9px;font-weight:700;color:#fff;background:${ph.color};padding:1px 6px;border-radius:3px;white-space:nowrap;opacity:.85;flex-shrink:0">${resParts.join(' · ')}</span>`
+          : '';
+        html += `<div class="g-phase-row">
+          <div class="g-phase-info" onclick="openPhaseModal(${p.id},${ph.id})">
+            ${dot}
+            <span class="pbadge" style="background:${ph.color}">${ph.name}</span>
+            <span style="font-size:11px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${fmtDate(ph.startDate)} → ${fmtDate(ph.endDate)}</span>
+            ${resPill}
+            <span style="font-size:9px;color:#CBD5E1;flex-shrink:0">✎</span>
+          </div>
+          <div class="g-phase-bars">${phaseBarHtml(ph, p.id)}</div>
+        </div>`;
+      });
+      html += `<div class="g-add-phase-row">
+        <button class="g-add-phase-btn" onclick="openPhaseModal(${p.id},null)">＋ Add phase</button>
+        <div class="g-add-phase-spacer"></div>
+      </div>`;
+    }
+  }
+  return html;
+}
+
+function sectionRow(label, count, color, extra='') {
+  return `<div class="g-section">
+    <div class="g-sec-info" style="border-left:3px solid ${color}">
+      <span style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.8px">${label}</span>
+      <span style="font-size:10px;color:#94A3B8;margin-left:6px">${count} project${count!==1?'s':''}</span>
+      ${extra}
+    </div>
+    <div class="g-sec-bar"></div>
+  </div>`;
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function setView(v, el) {
+  viewMode = v;
+  document.querySelectorAll('.vtab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  const ganttMain = document.getElementById('ganttMain');
+  const resMain   = document.getElementById('resView');
+  const lvMain    = document.getElementById('lvView');
+  if (v === 'resources') {
+    ganttMain.style.display = 'none';
+    resMain.style.display   = 'block';
+    lvMain.style.display    = 'none';
+    renderResView();
+  } else if (v === 'levelling') {
+    ganttMain.style.display = 'none';
+    resMain.style.display   = 'none';
+    lvMain.style.display    = 'block';
+    renderLvView();
+  } else {
+    ganttMain.style.display = '';
+    resMain.style.display   = 'none';
+    lvMain.style.display    = 'none';
+    render();
+  }
+}
+
+function render() {
+  renderStats();
+  if (viewMode === 'resources') { renderResView(); return; }
+  const list = filtered();
+  const gantt = document.getElementById('gantt');
+  const head = `<div class="gantt-head">
+    <div class="gh-info">
+      <span style="font-size:9px;color:#94A3B8">▶ = expand phases</span>
+    </div>
+    <div class="gh-months">${GCOLS.map(m=>`<div class="gh-mo">${m}</div>`).join('')}</div>
+  </div>`;
+
+  if (!list.length) {
+    gantt.innerHTML = head + `<div class="empty-state"><h3>No projects match</h3><p>Clear filters or add a new project.</p></div>`;
+    return;
+  }
+
+  let body = '';
+  if (viewMode === 'stream') {
+    [['reg','Regulatory'],['bau','BAU / Technical'],['nonreg','Non-Regulatory'],['gps','GPS Projects']].forEach(([s,lbl]) => {
+      const grp = list.filter(p=>p.stream===s);
+      if (!grp.length) return;
+      body += sectionRow(lbl, grp.length, SCOL[s]);
+      grp.forEach(p => body += ganttRow(p));
+    });
+  } else if (viewMode === 'squad') {
+    [{key:'reg-squad',lbl:'Regulatory Squad',col:'#DC2626'},{key:'nonreg-squad',lbl:'Non-Reg / GPS Squad',col:'#1D4ED8'},{key:'',lbl:'Unassigned',col:'#94A3B8'}].forEach(sq => {
+      const grp = list.filter(p=>(p.squad||'')===sq.key);
+      if (!grp.length) return;
+      body += sectionRow(sq.lbl, grp.length, sq.col);
+      grp.forEach(p => body += ganttRow(p));
+    });
+  } else {
+    [['active','#0D9488'],['planning','#F59E0B'],['tbd','#94A3B8'],['completed','#16A34A']].forEach(([s,c]) => {
+      const grp = list.filter(p=>p.status===s);
+      if (!grp.length) return;
+      body += sectionRow(STLBL[s], grp.length, c);
+      grp.forEach(p => body += ganttRow(p));
+    });
+  }
+  gantt.innerHTML = head + body;
+}
+
+// ─── Expand/collapse ─────────────────────────────────────────────────────────
+function toggleExpand(e, id) {
+  e.stopPropagation();
+  expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+  render();
+}
+
+// ─── Tooltip ─────────────────────────────────────────────────────────────────
+function showTip(e, id) {
+  const p = projects.find(x=>x.id===id); if (!p) return;
+  const phases = (p.phases||[]).map(ph=>`<span style="display:inline-block;padding:1px 5px;border-radius:2px;background:${ph.color};color:#fff;font-size:9px;margin:1px">${ph.name}</span>`).join(' ');
+  const ms = p.milestone ? `<br><span style="color:#0D9488">▶ ${p.milestone}</span>` : '';
+  document.getElementById('tip').innerHTML =
+    `<strong>${p.name}</strong><br>${fmtDate(p.startDate)} → ${fmtDate(p.endDate)}` +
+    (p.resources ? `<br>${p.resources} FTE${p.resources!==1?'s':''}` : '') + ms +
+    ((p.phases||[]).length ? `<br>${phases}` : '');
+  positionTip(e);
+  document.getElementById('tip').classList.add('on');
+}
+function showPhaseTip(e, projId, phId) {
+  const p  = projects.find(x=>x.id===projId);
+  const ph = (p?.phases||[]).find(x=>x.id===phId); if (!ph) return;
+  document.getElementById('tip').innerHTML =
+    `<strong>${ph.name}</strong> <span style="background:${ph.color};color:#fff;padding:1px 5px;border-radius:2px;font-size:9px">${PT[ph.type]?.label||ph.type}</span><br>${fmtDate(ph.startDate)} → ${fmtDate(ph.endDate)}` +
+    (ph.notes ? `<br><span style="color:#94A3B8">${ph.notes}</span>` : '');
+  positionTip(e);
+  document.getElementById('tip').classList.add('on');
+}
+function positionTip(e) { const t=document.getElementById('tip'); t.style.left=(e.clientX+14)+'px'; t.style.top=(e.clientY-12)+'px'; }
+function hideTip() { document.getElementById('tip').classList.remove('on'); }
+document.addEventListener('mousemove', e => { const t=document.getElementById('tip'); if(t.classList.contains('on')){t.style.left=(e.clientX+14)+'px';t.style.top=(e.clientY-12)+'px';} });
+
+// ─── Color picker ─────────────────────────────────────────────────────────────
+let selectedColor = PALETTE[0];
+function renderColorPicker(current) {
+  selectedColor = current || PALETTE[0];
+  document.getElementById('colorPicker').innerHTML = PALETTE.map(c =>
+    `<div onclick="pickColor('${c}')" style="width:22px;height:22px;border-radius:4px;background:${c};cursor:pointer;border:3px solid ${c===selectedColor?'#0F2544':'transparent'};transition:border .1s" id="cp-${c.replace('#','')}"></div>`
+  ).join('') + `<input type="color" id="customColor" value="${selectedColor}" oninput="pickColor(this.value)" style="width:30px;height:22px;padding:1px;border:1px solid #CBD5E1;border-radius:4px;cursor:pointer" title="Custom colour">`;
+}
+function pickColor(c) {
+  selectedColor = c;
+  document.querySelectorAll('#colorPicker > div').forEach(el => {
+    const ec = '#' + el.id.replace('cp-','');
+    el.style.border = `3px solid ${ec === c ? '#0F2544' : ec}`;
+    el.style.borderColor = ec === c ? '#0F2544' : 'transparent';
+  });
+}
+function onPhaseTypeChange() {
+  const type = document.getElementById('mopType').value;
+  const pt = PT[type];
+  if (pt) pickColor(pt.color);
+  renderColorPicker(pt?.color || selectedColor);
+  if (!document.getElementById('mopName').value || Object.values(PT).some(p=>p.label===document.getElementById('mopName').value)) {
+    document.getElementById('mopName').value = pt?.label || '';
+  }
+}
+
+// ─── Phase chips in project modal ─────────────────────────────────────────────
+function renderPhaseChips(projId) {
+  const p = projects.find(x=>x.id===+projId);
+  const phases = p ? (p.phases||[]) : [];
+  const list = document.getElementById('phaseChipList');
+  if (!phases.length) {
+    list.innerHTML = `<div class="no-phases-msg">No phases yet — click "Add Phase" to break this project into SD, DEV, SIT, UAT etc.</div>`;
+    return;
+  }
+  list.innerHTML = phases.map(ph => {
+    const w = (ph.startDate && ph.endDate)
+      ? Math.max(8, Math.min(90, (new Date(ph.endDate)-new Date(ph.startDate))/86400000*0.4))
+      : 30;
+    return `<div class="phase-chip" onclick="openPhaseModal(${projId},${ph.id})">
+      <div class="phase-chip-bar" style="background:${ph.color};width:${w}px"></div>
+      <span class="pbadge" style="background:${ph.color}">${ph.name}</span>
+      <span class="phase-chip-name" style="color:#64748B;font-weight:400">${PT[ph.type]?.full||ph.type}</span>
+      <span class="phase-chip-dates">${fmtDate(ph.startDate)} → ${fmtDate(ph.endDate)}</span>
+      <button class="phase-chip-del" onclick="quickDeletePhase(event,${projId},${ph.id})">×</button>
+    </div>`;
+  }).join('');
+}
+function quickDeletePhase(e, projId, phaseId) {
+  e.stopPropagation();
+  if (!confirm('Remove this phase?')) return;
+  const p = projects.find(x=>x.id===projId);
+  if (p) p.phases = (p.phases||[]).filter(ph=>ph.id!==phaseId);
+  persist();
+  renderPhaseChips(projId);
+  render();
+}
+
+// ─── Project modal ────────────────────────────────────────────────────────────
+function openModal(id) {
+  const del = document.getElementById('moDelete');
+  document.getElementById('moId').value = id || '';
+  if (id) {
+    const p = projects.find(x=>x.id===id);
+    document.getElementById('moTitle').textContent   = 'Edit Project';
+    document.getElementById('moName').value          = p.name;
+    document.getElementById('moStream').value        = p.stream;
+    document.getElementById('moStatus').value        = p.status;
+    document.getElementById('moStart').value         = p.startDate || '';
+    document.getElementById('moEnd').value           = p.endDate   || '';
+    document.getElementById('moRes').value           = p.resources || '';
+    document.getElementById('moSquad').value         = p.squad     || '';
+    document.getElementById('moMilestone').value     = p.milestone || '';
+    document.getElementById('moNotes').value         = p.notes     || '';
+    del.style.display = 'inline-flex';
+    renderPhaseChips(id);
+  } else {
+    document.getElementById('moTitle').textContent = 'Add Project';
+    ['moName','moStart','moEnd','moRes','moMilestone','moNotes'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('moStream').value  = 'reg';
+    document.getElementById('moStatus').value  = 'active';
+    document.getElementById('moSquad').value   = '';
+    del.style.display = 'none';
+    document.getElementById('phaseChipList').innerHTML = '';
+  }
+  document.getElementById('mo').classList.add('open');
+  setTimeout(()=>document.getElementById('moName').focus(),80);
+}
+function closeModal(mid) { document.getElementById(mid).classList.remove('open'); }
+function bgClose(e, mid) { if (e.target===document.getElementById(mid)) closeModal(mid); }
+
+function saveProj() {
+  const name = document.getElementById('moName').value.trim();
+  if (!name) { document.getElementById('moName').focus(); return; }
+  const id = document.getElementById('moId').value;
+  const data = {
+    name,
+    stream:    document.getElementById('moStream').value,
+    status:    document.getElementById('moStatus').value,
+    startDate: document.getElementById('moStart').value,
+    endDate:   document.getElementById('moEnd').value,
+    resources: parseInt(document.getElementById('moRes').value)||0,
+    squad:     document.getElementById('moSquad').value,
+    milestone: document.getElementById('moMilestone').value.trim(),
+    notes:     document.getElementById('moNotes').value.trim(),
+  };
+  if (id) {
+    const idx = projects.findIndex(p=>p.id===+id);
+    projects[idx] = { ...projects[idx], ...data };
+  } else {
+    projects.push({ id:nextProjId++, phases:[], ...data });
+  }
+  persist(); closeModal('mo'); render();
+}
+function deleteProj() {
+  const id = +document.getElementById('moId').value;
+  if (!id || !confirm('Delete this project?')) return;
+  projects = projects.filter(p=>p.id!==id);
+  persist(); closeModal('mo'); render();
+}
+
+// ─── Phase modal ─────────────────────────────────────────────────────────────
+function openPhaseModal(projId, phaseId) {
+  // Store project context — need it even when called from project modal
+  const activeProjId = projId || +document.getElementById('moId').value;
+  document.getElementById('mopProjId').value  = activeProjId;
+  document.getElementById('mopPhaseId').value = phaseId || '';
+  const del = document.getElementById('mopDelete');
+
+  if (phaseId) {
+    const p  = projects.find(x=>x.id===activeProjId);
+    const ph = (p?.phases||[]).find(x=>x.id===phaseId);
+    document.getElementById('mopTitle').textContent = 'Edit Phase';
+    document.getElementById('mopType').value        = ph.type;
+    document.getElementById('mopName').value        = ph.name;
+    document.getElementById('mopStart').value       = ph.startDate || '';
+    document.getElementById('mopEnd').value         = ph.endDate   || '';
+    document.getElementById('mopSeFte').value       = ph.seFte != null ? ph.seFte : '';
+    document.getElementById('mopTaFte').value       = ph.taFte != null ? ph.taFte : '';
+    document.getElementById('mopNotes').value       = ph.notes     || '';
+    renderColorPicker(ph.color);
+    del.style.display = 'inline-flex';
+  } else {
+    document.getElementById('mopTitle').textContent = 'Add Phase';
+    document.getElementById('mopType').value  = 'dev';
+    document.getElementById('mopName').value  = 'DEV';
+    document.getElementById('mopStart').value = '';
+    document.getElementById('mopEnd').value   = '';
+    document.getElementById('mopSeFte').value = '';
+    document.getElementById('mopTaFte').value = '';
+    document.getElementById('mopNotes').value = '';
+    renderColorPicker(PT['dev'].color);
+    del.style.display = 'none';
+  }
+  document.getElementById('mop').classList.add('open');
+}
+
+function savePhase() {
+  const name = document.getElementById('mopName').value.trim();
+  if (!name) { document.getElementById('mopName').focus(); return; }
+  const projId  = +document.getElementById('mopProjId').value;
+  const phaseId = document.getElementById('mopPhaseId').value;
+  const p = projects.find(x=>x.id===projId);
+  if (!p) return;
+  if (!p.phases) p.phases = [];
+
+  const seFteRaw = parseFloat(document.getElementById('mopSeFte').value);
+  const taFteRaw = parseFloat(document.getElementById('mopTaFte').value);
+  const data = {
+    type:      document.getElementById('mopType').value,
+    name,
+    color:     selectedColor,
+    startDate: document.getElementById('mopStart').value,
+    endDate:   document.getElementById('mopEnd').value,
+    seFte:     isNaN(seFteRaw) ? 0 : seFteRaw,
+    taFte:     isNaN(taFteRaw) ? 0 : taFteRaw,
+    notes:     document.getElementById('mopNotes').value.trim(),
+  };
+  if (phaseId) {
+    const idx = p.phases.findIndex(x=>x.id===+phaseId);
+    p.phases[idx] = { ...p.phases[idx], ...data };
+  } else {
+    p.phases.push({ id:nextPhaseId++, ...data });
+  }
+  expanded.add(projId); // auto-expand to show the new phase
+  persist(); closeModal('mop');
+  // Refresh chips if project modal is open
+  if (document.getElementById('mo').classList.contains('open')) renderPhaseChips(projId);
+  render();
+}
+
+function deletePhase() {
+  const projId  = +document.getElementById('mopProjId').value;
+  const phaseId = +document.getElementById('mopPhaseId').value;
+  if (!confirm('Delete this phase?')) return;
+  const p = projects.find(x=>x.id===projId);
+  if (p) p.phases = (p.phases||[]).filter(x=>x.id!==phaseId);
+  persist(); closeModal('mop');
+  if (document.getElementById('mo').classList.contains('open')) renderPhaseChips(projId);
+  render();
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(projects,null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='aar_programs_of_work_2026.json'; a.click();
+}
+
+// ─── Resource View ────────────────────────────────────────────────────────────
+
+// ── XLS source data (AAR_Monthly_Resource_Formulas.xlsx) ──────────────────────
+const XLS_DATA = {
+  // Monthly Summary sheet — headcount needed per month (May–Dec)
+  se:    [6,  10, 6,  6,  2, 2, 0, 0],  // Software Engineers
+  ta:    [2,   5, 3,  4,  3, 2, 0, 0],  // Test Analysts
+  total: [8,  15, 9, 10,  5, 4, 0, 0],
+  // Heatmap sheet — individual resource allocation (1 = active that month)
+  engineers: [
+    { name:'Engineer 1',  months:[1,1,1,1,1,1,0,0] },
+    { name:'Engineer 2',  months:[1,1,1,1,1,1,0,0] },
+    { name:'Engineer 3',  months:[1,1,1,1,0,0,0,0] },
+    { name:'Engineer 4',  months:[1,1,1,1,0,0,0,0] },
+    { name:'Engineer 5',  months:[1,1,1,1,0,0,0,0] },
+    { name:'Engineer 6',  months:[1,1,1,1,0,0,0,0] },
+    { name:'Engineer 7',  months:[0,1,0,0,0,0,0,0] },
+    { name:'Engineer 8',  months:[0,1,0,0,0,0,0,0] },
+    { name:'Engineer 9',  months:[0,1,0,0,0,0,0,0] },
+    { name:'Engineer 10', months:[0,1,0,0,0,0,0,0] },
+    { name:'Engineer 11', months:[0,0,0,0,0,0,0,0] },
+    { name:'Engineer 12', months:[0,0,0,0,0,0,0,0] },
+  ],
+  testers: [
+    { name:'Tester 1', months:[1,1,1,1,1,1,0,0] },
+    { name:'Tester 2', months:[1,1,1,1,1,1,0,0] },
+    { name:'Tester 3', months:[0,1,1,1,1,0,0,0] },
+    { name:'Tester 4', months:[0,1,0,1,0,0,0,0] },
+    { name:'Tester 5', months:[0,1,0,0,0,0,0,0] },
+    { name:'Tester 6', months:[0,0,0,0,0,0,0,0] },
+    { name:'Tester 7', months:[0,0,0,0,0,0,0,0] },
+    { name:'Tester 8', months:[0,0,0,0,0,0,0,0] },
+  ],
+};
+
+let resSub          = 'role';  // 'role' (default, XLS-based) | 'squad' (project-based)
+let selMonth        = null;    // selected month index 0=May…7=Dec
+let regCore         = 5;       // committed Reg squad size (capacity model)
+let nrCore          = 5;       // committed Non-Reg/GPS squad size (capacity model)
+let squadModelVisible = false; // capacity model collapsed by default
+
+function toggleSquadModel() {
+  squadModelVisible = !squadModelVisible;
+  const el = document.getElementById('squadModel');
+  const btn = document.getElementById('sqToggleBtn');
+  el.style.display  = squadModelVisible ? 'block' : 'none';
+  btn.textContent   = squadModelVisible ? '▲ Hide' : '▼ Show';
+  if (squadModelVisible) {
+    // Compute demands to populate the squad model tables
+    const demands = resSub === 'role'
+      ? GCOLS.map((_, i) => ({ reg: XLS_DATA.se[i], nonreg: XLS_DATA.ta[i], total: XLS_DATA.total[i] }))
+      : GCOLS.map((_, i) => { const ps=getMonthProjects(i); const reg=ps.filter(p=>p.squad==='reg-squad').reduce((s,p)=>s+(p.resources||0),0); const nonreg=ps.filter(p=>p.squad!=='reg-squad').reduce((s,p)=>s+(p.resources||0),0); return {reg,nonreg,total:reg+nonreg,projects:ps}; });
+    renderSquadModel(demands);
+  }
+  // Redraw chart to show/hide capacity lines
+  renderResView();
+}
+
+function setResSub(sub, el) {
+  resSub = sub;
+  selMonth = null;
+  document.querySelectorAll('.rstab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderResView();
+}
+
+function selectResMonth(idx) {
+  selMonth = selMonth === idx ? null : idx;
+  renderResView();
+}
+
+/** Return projects that overlap with month mIdx (0=May…7=Dec) and have resources */
+function getMonthProjects(mIdx) {
+  const year = 2026, month = 4 + mIdx;            // Jan=0, May=4
+  const ms = new Date(year, month, 1);
+  const me = new Date(year, month + 1, 0);         // last day of month
+  return projects.filter(p =>
+    p.startDate && p.endDate && (p.resources || 0) > 0 &&
+    new Date(p.startDate) <= me && new Date(p.endDate) >= ms
+  );
+}
+
+/** Build the SVG bar chart.
+ *  demands shape for 'role':  { se, ta, total }
+ *  demands shape for 'squad': { reg, nonreg, total, projects }
+ */
+function buildChartSVG(demands) {
+  const W = 720, H = 210, PL = 30, PB = 28, PT = 20;
+  const chartW = W - PL - 8;
+  const chartH = H - PB - PT;
+  const n      = demands.length;
+  const slotW  = chartW / n;
+  const barW   = slotW * 0.54;
+  const barOff = (slotW - barW) / 2;
+
+  // Only include capacity in scale when the model panel is open
+  const capMax = squadModelVisible ? (resSub === 'role' ? regCore + nrCore : Math.max(regCore, nrCore)) : 0;
+  const maxD   = Math.max(...demands.map(d => d.total), capMax, 1);
+
+  let els = '';
+
+  // Grid lines + y-axis ticks
+  const step = maxD <= 8 ? 2 : maxD <= 16 ? 4 : 5;
+  for (let t = 0; t <= maxD + step; t += step) {
+    const y = (PT + chartH - (t / maxD) * chartH).toFixed(1);
+    els += `<line x1="${PL}" y1="${y}" x2="${W - 4}" y2="${y}" stroke="#F1F5F9" stroke-width="1"/>`;
+    els += `<text x="${PL - 4}" y="${(+y + 3).toFixed(1)}" text-anchor="end" fill="#CBD5E1" font-size="9" font-family="system-ui,sans-serif">${t}</text>`;
+  }
+
+  // Bars
+  demands.forEach((d, i) => {
+    const x     = PL + i * slotW + barOff;
+    const isSel = selMonth === i;
+
+    if (resSub === 'role') {
+      // Stacked: SE (bottom, blue) + TA (top, amber) — from XLS
+      const seH  = Math.max(0, (d.se / maxD) * chartH);
+      const taH  = Math.max(0, (d.ta / maxD) * chartH);
+      const seY  = PT + chartH - seH;
+      const taY  = seY - taH;
+      if (d.se)  els += `<rect x="${x.toFixed(1)}" y="${seY.toFixed(1)}" width="${barW.toFixed(1)}" height="${seH.toFixed(1)}" fill="${isSel ? '#0EA5E9' : '#0369A1'}" rx="3" style="cursor:pointer" onclick="selectResMonth(${i})"/>`;
+      if (d.ta)  els += `<rect x="${x.toFixed(1)}" y="${taY.toFixed(1)}" width="${barW.toFixed(1)}" height="${taH.toFixed(1)}" fill="${isSel ? '#FBBF24' : '#D97706'}" rx="3" style="cursor:pointer" onclick="selectResMonth(${i})"/>`;
+      if (d.total > 0) {
+        const topY = (d.ta ? taY : seY) - 4;
+        els += `<text x="${(x + barW / 2).toFixed(1)}" y="${topY.toFixed(1)}" text-anchor="middle" fill="${isSel ? '#0369A1' : '#374151'}" font-size="11" font-weight="700" font-family="system-ui,sans-serif">${d.total}</text>`;
+      }
+    } else {
+      // Stacked: Reg (bottom, red) + Non-Reg (top, purple) — from projects
+      const regH = Math.max(0, (d.reg    / maxD) * chartH);
+      const nrH  = Math.max(0, (d.nonreg / maxD) * chartH);
+      const regY = PT + chartH - regH;
+      const nrY  = regY - nrH;
+      if (d.reg)    els += `<rect x="${x.toFixed(1)}" y="${regY.toFixed(1)}" width="${barW.toFixed(1)}" height="${regH.toFixed(1)}" fill="${isSel ? '#EF4444' : '#DC2626'}" rx="3" style="cursor:pointer" onclick="selectResMonth(${i})"/>`;
+      if (d.nonreg) els += `<rect x="${x.toFixed(1)}" y="${nrY.toFixed(1)}"  width="${barW.toFixed(1)}" height="${nrH.toFixed(1)}"  fill="${isSel ? '#A78BFA' : '#7C3AED'}" rx="3" style="cursor:pointer" onclick="selectResMonth(${i})"/>`;
+      if (d.total > 0) {
+        const labelY = (d.nonreg ? nrY : regY) - 4;
+        els += `<text x="${(x + barW / 2).toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" fill="#374151" font-size="11" font-weight="700" font-family="system-ui,sans-serif">${d.total}</text>`;
+      }
+    }
+
+    // Month label
+    const mx = (x + barW / 2).toFixed(1);
+    els += `<text x="${mx}" y="${(H - 8).toFixed(1)}" text-anchor="middle" fill="${isSel ? '#0D9488' : '#64748B'}" font-size="10" font-weight="${isSel ? 700 : 400}" font-family="system-ui,sans-serif">${GCOLS[i]}</text>`;
+  });
+
+  // Capacity dashed lines — only when squad model is expanded
+  if (squadModelVisible) {
+    if (resSub === 'role') {
+      const seCap = regCore;  // SE ~= Reg squad slider
+      const taCap = nrCore;   // TA ~= Non-Reg slider
+      const scY = (PT + chartH - (seCap / maxD) * chartH).toFixed(1);
+      const tcY = (PT + chartH - (taCap / maxD) * chartH).toFixed(1);
+      els += `<line x1="${PL}" y1="${scY}" x2="${W-4}" y2="${scY}" stroke="#0369A1" stroke-width="1.5" stroke-dasharray="5,3" opacity=".6"/>`;
+      els += `<text x="${W-6}" y="${(+scY-4).toFixed(1)}" text-anchor="end" fill="#0369A1" font-size="9" font-weight="700" font-family="system-ui,sans-serif">SE cap ${seCap}</text>`;
+      els += `<line x1="${PL}" y1="${tcY}" x2="${W-4}" y2="${tcY}" stroke="#D97706" stroke-width="1.5" stroke-dasharray="5,3" opacity=".6"/>`;
+      els += `<text x="${W-6}" y="${(+tcY-4).toFixed(1)}" text-anchor="end" fill="#D97706" font-size="9" font-weight="700" font-family="system-ui,sans-serif">TA cap ${taCap}</text>`;
+    } else {
+      const rcy = (PT + chartH - (regCore / maxD) * chartH).toFixed(1);
+      const ncy = (PT + chartH - (nrCore  / maxD) * chartH).toFixed(1);
+      els += `<line x1="${PL}" y1="${rcy}" x2="${W-4}" y2="${rcy}" stroke="#DC2626" stroke-width="1.5" stroke-dasharray="5,3" opacity=".7"/>`;
+      els += `<text x="${W-6}" y="${(+rcy-4).toFixed(1)}" text-anchor="end" fill="#DC2626" font-size="9" font-weight="700" font-family="system-ui,sans-serif">Reg cap ${regCore}</text>`;
+      els += `<line x1="${PL}" y1="${ncy}" x2="${W-4}" y2="${ncy}" stroke="#7C3AED" stroke-width="1.5" stroke-dasharray="5,3" opacity=".7"/>`;
+      els += `<text x="${W-6}" y="${(+ncy-4).toFixed(1)}" text-anchor="end" fill="#7C3AED" font-size="9" font-weight="700" font-family="system-ui,sans-serif">NR cap ${nrCore}</text>`;
+    }
+  }
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">${els}</svg>`;
+}
+
+function renderResView() {
+  // ── Build demands array based on active sub-tab ───────────────────────────
+  let demands;
+  if (resSub === 'role') {
+    // Default: XLS data — SE vs TA headcount per month
+    demands = GCOLS.map((_, i) => ({
+      se:    XLS_DATA.se[i],
+      ta:    XLS_DATA.ta[i],
+      total: XLS_DATA.total[i],
+    }));
+  } else {
+    // Reg vs Non-Reg: derived live from projects
+    demands = GCOLS.map((_, i) => {
+      const ps     = getMonthProjects(i);
+      const reg    = ps.filter(p => p.squad === 'reg-squad').reduce((s, p) => s + (p.resources || 0), 0);
+      const nonreg = ps.filter(p => p.squad !== 'reg-squad').reduce((s, p) => s + (p.resources || 0), 0);
+      return { reg, nonreg, total: reg + nonreg, projects: ps };
+    });
+  }
+
+  // ── Chart ─────────────────────────────────────────────────────────────────
+  document.getElementById('resChartWrap').innerHTML = buildChartSVG(demands);
+
+  // ── Legend ────────────────────────────────────────────────────────────────
+  const legEl = document.getElementById('resLegend');
+  if (resSub === 'role') {
+    legEl.innerHTML = `
+      <span><span class="res-leg-dot" style="background:#0369A1"></span>Software Engineers (SE)</span>
+      <span><span class="res-leg-dot" style="background:#D97706"></span>Test Analysts (TA)</span>
+      <span style="color:#94A3B8;font-size:10px">Source: AAR_Monthly_Resource_Formulas.xlsx · click a bar to see who's allocated</span>`;
+  } else {
+    legEl.innerHTML = `
+      <span><span class="res-leg-dot" style="background:#DC2626"></span>Regulatory Squad</span>
+      <span><span class="res-leg-dot" style="background:#7C3AED"></span>Non-Reg / GPS Squad</span>
+      <span style="color:#94A3B8;font-size:10px">Derived from project squad assignments · click a bar to see which projects</span>`;
+  }
+
+  // ── Drill-down ────────────────────────────────────────────────────────────
+  const dd = document.getElementById('resDrilldown');
+  if (selMonth !== null) {
+    const d      = demands[selMonth];
+    const mLabel = GCOLS[selMonth];
+    dd.style.display = '';
+    dd.className = 'res-drill';
+
+    if (resSub === 'role') {
+      // Show named resources from XLS heatmap
+      const activeEng  = XLS_DATA.engineers.filter(e => e.months[selMonth] === 1);
+      const activeTa   = XLS_DATA.testers.filter(t => t.months[selMonth] === 1);
+      const chip = (name, bg) =>
+        `<span style="display:inline-block;padding:3px 9px;border-radius:4px;background:${bg};color:#fff;font-size:11px;font-weight:500;margin:2px">${name}</span>`;
+      const engChips = activeEng.length
+        ? activeEng.map(e => chip(e.name, '#0369A1')).join('')
+        : `<span style="color:#94A3B8;font-size:11px">None allocated</span>`;
+      const taChips = activeTa.length
+        ? activeTa.map(t => chip(t.name, '#D97706')).join('')
+        : `<span style="color:#94A3B8;font-size:11px">None allocated</span>`;
+
+      dd.innerHTML = `
+        <div class="res-drill-title">
+          📅 <strong>${mLabel} 2026</strong>
+          <span style="background:#0369A1;color:#fff;padding:2px 9px;border-radius:4px;font-size:11px">${d.se} SE</span>
+          <span style="background:#D97706;color:#fff;padding:2px 9px;border-radius:4px;font-size:11px">${d.ta} TA</span>
+          <span style="font-weight:800;color:#0F2544">${d.total} people total</span>
+          <button onclick="selMonth=null;renderResView()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94A3B8;font-size:20px;line-height:1;padding:0 4px" title="Close">×</button>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:10px;font-weight:700;color:#0369A1;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Software Engineers (${d.se})</div>
+          <div>${engChips}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:700;color:#D97706;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Test Analysts (${d.ta})</div>
+          <div>${taChips}</div>
+        </div>`;
+
+    } else {
+      // Show projects driving the demand
+      if (!d.projects || !d.projects.length) {
+        dd.innerHTML = `<div class="res-drill-title">${mLabel} 2026 — No projects with assigned resources this month.</div>`;
+      } else {
+        const rows = [...d.projects]
+          .sort((a, b) => (b.resources || 0) - (a.resources || 0))
+          .map(p => {
+            const sqBadge = p.squad === 'reg-squad'
+              ? `<span class="sbadge sb-reg" style="font-size:9px">Reg Squad</span>`
+              : `<span class="sbadge sb-gps" style="font-size:9px">Non-Reg</span>`;
+            const phaseChips = (p.phases || []).map(ph =>
+              `<span style="display:inline-block;padding:1px 5px;border-radius:2px;background:${ph.color};color:#fff;font-size:8px;margin:1px">${ph.name}</span>`
+            ).join('');
+            return `<tr>
+              <td><span class="sbadge sb-${p.stream}">${SLBL[p.stream]}</span></td>
+              <td style="font-weight:500">${p.name}</td>
+              <td>${sqBadge}</td>
+              <td style="text-align:center;font-weight:700;font-size:14px;color:#0F2544">${p.resources}</td>
+              <td style="font-size:10px">${phaseChips || '<span style="color:#CBD5E1">—</span>'}</td>
+            </tr>`;
+          }).join('');
+        dd.innerHTML = `
+          <div class="res-drill-title">
+            📅 <strong>${mLabel} 2026</strong>
+            <span style="background:#DC2626;color:#fff;padding:2px 9px;border-radius:4px;font-size:11px">Reg ${d.reg} FTE</span>
+            <span style="background:#7C3AED;color:#fff;padding:2px 9px;border-radius:4px;font-size:11px">Non-Reg ${d.nonreg} FTE</span>
+            <span style="font-weight:800;color:#0F2544">${d.total} FTE total · ${d.projects.length} project${d.projects.length !== 1 ? 's' : ''}</span>
+            <button onclick="selMonth=null;renderResView()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94A3B8;font-size:20px;line-height:1;padding:0 4px" title="Close">×</button>
+          </div>
+          <table class="dtable">
+            <thead><tr><th>Stream</th><th>Project</th><th>Squad</th><th style="text-align:center">FTEs</th><th>Active Phases</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      }
+    }
+  } else {
+    dd.style.display = 'none';
+  }
+
+  // ── Squad model — only re-render if already open ──────────────────────────
+  if (squadModelVisible) renderSquadModel(demands);
+}
+
+function renderSquadModel(demands) {
+  // In 'role' mode: left panel = SE (regCore slider), right panel = TA (nrCore slider)
+  // In 'squad' mode: left = Reg squad, right = Non-Reg/GPS squad
+  const isRole = resSub === 'role';
+
+  const leftKey   = isRole ? 'se'     : 'reg';
+  const rightKey  = isRole ? 'ta'     : 'nonreg';
+  const leftCap   = regCore;
+  const rightCap  = nrCore;
+  const leftColor = isRole ? '#0369A1' : '#DC2626';
+  const rightColor= isRole ? '#D97706' : '#7C3AED';
+  const leftLabel = isRole ? '● Software Engineers (SE)' : '● Regulatory Squad';
+  const rightLabel= isRole ? '● Test Analysts (TA)'      : '● Non-Reg / GPS Squad';
+
+  const leftPeak  = Math.max(...demands.map(d => d[leftKey]  || 0), 0);
+  const rightPeak = Math.max(...demands.map(d => d[rightKey] || 0), 0);
+  const leftShort = demands.reduce((s, d) => s + Math.max(0, (d[leftKey]  || 0) - leftCap),  0);
+  const rightShort= demands.reduce((s, d) => s + Math.max(0, (d[rightKey] || 0) - rightCap), 0);
+  const leftSurp  = demands.reduce((s, d) => s + Math.max(0, leftCap  - (d[leftKey]  || 0)), 0);
+  const rightSurp = demands.reduce((s, d) => s + Math.max(0, rightCap - (d[rightKey] || 0)), 0);
+
+  function sqRows(key, cap) {
+    return demands.map((d, i) => {
+      const dem      = d[key] || 0;
+      const delta    = cap - dem;
+      const cls      = delta < 0 ? 'cell-over' : delta > 0 ? 'cell-ok' : 'cell-neutral';
+      const sign     = delta > 0 ? '+' : '';
+      const deltaStr = dem > 0 ? `${sign}${delta}` : '—';
+      const isSel    = selMonth === i;
+      return `<tr style="${isSel ? 'background:#F0FDF9;font-weight:600' : ''}">
+        <td>${GCOLS[i]}</td>
+        <td>${dem || '—'}</td>
+        <td>${cap}</td>
+        <td class="${cls}">${deltaStr}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function sumCard(color, peak, short, surp, capId, capVal, label, rangeHandler) {
+    return `<div class="sq-card">
+      <div class="sq-head" style="color:${color}">${label}</div>
+      <div class="sq-slider-row">
+        <span style="font-size:11px;color:#64748B;white-space:nowrap">Committed size</span>
+        <input type="range" min="1" max="15" value="${capVal}" oninput="${rangeHandler}">
+        <span class="sq-val" id="${capId}">${capVal}</span>
+      </div>
+      <table class="sqtable">
+        <thead><tr><th>Month</th><th>Demand</th><th>Squad</th><th>Delta</th></tr></thead>
+        <tbody>${sqRows(label === leftLabel ? leftKey : rightKey, capVal)}</tbody>
+      </table>
+      <div class="sq-summary">
+        <div class="sq-sum-item"><div class="sq-sum-val" style="color:${color}">${peak}</div><div class="sq-sum-lbl">Peak Demand</div></div>
+        <div class="sq-sum-item"><div class="sq-sum-val" style="color:#F59E0B">${short}</div><div class="sq-sum-lbl">Flex Needed</div></div>
+        <div class="sq-sum-item"><div class="sq-sum-val" style="color:#16A34A">${surp}</div><div class="sq-sum-lbl">Surplus</div></div>
+      </div>
+    </div>`;
+  }
+
+  document.getElementById('squadModel').innerHTML = `<div class="squad-grid">
+    ${sumCard(leftColor,  leftPeak,  leftShort,  leftSurp,  'regCapVal', regCore, leftLabel,
+      'regCore=+this.value;document.getElementById(\'regCapVal\').textContent=this.value;renderResView()')}
+    ${sumCard(rightColor, rightPeak, rightShort, rightSurp, 'nrCapVal',  nrCore,  rightLabel,
+      'nrCore=+this.value;document.getElementById(\'nrCapVal\').textContent=this.value;renderResView()')}
+  </div>`;
+}
+
+// ─── Resource Levelling View ───────────────────────────────────────────────────
+let lvSub = 'combined';
+let lvCap = { combined: 8, reg: 5, nonreg: 5 };
+
+function setLvSub(sub, el) {
+  lvSub = sub;
+  document.querySelectorAll('.lvtab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderLvView();
+}
+
+function getLvDemands() {
+  if (lvSub === 'combined') return XLS_DATA.total;
+  const isReg = lvSub === 'reg';
+  return GCOLS.map((_, i) => {
+    const ps = getMonthProjects(i).filter(p => isReg ? p.squad === 'reg-squad' : p.squad !== 'reg-squad');
+    return ps.reduce((s, p) => s + (p.resources || 0), 0);
+  });
+}
+
+function buildLvChart(demands, cap) {
+  const W = 720, H = 230, PL = 30, PB = 30, PT = 22;
+  const chartW = W - PL - 8;
+  const chartH = H - PB - PT;
+  const n      = demands.length;
+  const slotW  = chartW / n;
+  const barW   = slotW * 0.58;
+  const barOff = (slotW - barW) / 2;
+  const maxD   = Math.max(...demands, cap + 1, 1);
+
+  let els = '';
+
+  // Grid lines
+  const step = maxD <= 8 ? 2 : maxD <= 16 ? 4 : 5;
+  for (let t = 0; t <= maxD + step; t += step) {
+    const y = (PT + chartH - (t / maxD) * chartH).toFixed(1);
+    els += `<line x1="${PL}" y1="${y}" x2="${W-4}" y2="${y}" stroke="#F1F5F9" stroke-width="1"/>`;
+    els += `<text x="${PL-4}" y="${(+y+3).toFixed(1)}" text-anchor="end" fill="#CBD5E1" font-size="9" font-family="system-ui,sans-serif">${t}</text>`;
+  }
+
+  const capY = PT + chartH - (cap / maxD) * chartH;
+
+  // Surplus zone (light green fill below capacity line)
+  els += `<rect x="${PL}" y="${capY.toFixed(1)}" width="${chartW}" height="${Math.max(0, PT + chartH - capY).toFixed(1)}" fill="#F0FDF4" opacity=".5" rx="2"/>`;
+
+  demands.forEach((d, i) => {
+    if (d === 0) {
+      // Empty month label
+      const x = PL + i * slotW + barOff;
+      els += `<text x="${(x+barW/2).toFixed(1)}" y="${(H-8).toFixed(1)}" text-anchor="middle" fill="#E2E8F0" font-size="10" font-family="system-ui,sans-serif">${GCOLS[i]}</text>`;
+      return;
+    }
+
+    const x      = PL + i * slotW + barOff;
+    const isOver = d > cap;
+    const withinD = Math.min(d, cap);
+    const withinH = (withinD / maxD) * chartH;
+    const withinY = PT + chartH - withinH;
+
+    // Within-capacity bar (blue)
+    if (withinH > 0) {
+      els += `<rect x="${x.toFixed(1)}" y="${withinY.toFixed(1)}" width="${barW.toFixed(1)}" height="${withinH.toFixed(1)}" fill="#0369A1" rx="3" opacity=".85"/>`;
+    }
+
+    // Over-capacity bar (red, stacked on top)
+    if (isOver) {
+      const overH = ((d - cap) / maxD) * chartH;
+      const overY = capY - overH;
+      els += `<rect x="${x.toFixed(1)}" y="${overY.toFixed(1)}" width="${barW.toFixed(1)}" height="${overH.toFixed(1)}" fill="#DC2626" rx="3"/>`;
+      // Shortfall label on top
+      els += `<text x="${(x+barW/2).toFixed(1)}" y="${(overY-5).toFixed(1)}" text-anchor="middle" fill="#DC2626" font-size="11" font-weight="800" font-family="system-ui,sans-serif">▲${d-cap}</text>`;
+    } else {
+      // Total on top of within bar
+      els += `<text x="${(x+barW/2).toFixed(1)}" y="${(withinY-5).toFixed(1)}" text-anchor="middle" fill="#0369A1" font-size="11" font-weight="700" font-family="system-ui,sans-serif">${d}</text>`;
+    }
+
+    // Month label
+    els += `<text x="${(x+barW/2).toFixed(1)}" y="${(H-8).toFixed(1)}" text-anchor="middle" fill="#64748B" font-size="10" font-family="system-ui,sans-serif">${GCOLS[i]}</text>`;
+  });
+
+  // Capacity line
+  els += `<line x1="${PL}" y1="${capY.toFixed(1)}" x2="${W-4}" y2="${capY.toFixed(1)}" stroke="#F59E0B" stroke-width="2.5" stroke-dasharray="7,4"/>`;
+  els += `<circle cx="${(PL+4).toFixed(1)}" cy="${capY.toFixed(1)}" r="5" fill="#F59E0B"/>`;
+  els += `<text x="${W-6}" y="${(capY-7).toFixed(1)}" text-anchor="end" fill="#F59E0B" font-size="10" font-weight="700" font-family="system-ui,sans-serif">▶ ${cap} FTE</text>`;
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">${els}</svg>`;
+}
+
+function renderLvView() {
+  const demands = getLvDemands();
+  const cap     = lvCap[lvSub];
+
+  // Sync slider
+  const slider = document.getElementById('lvSlider');
+  if (slider) { slider.value = cap; slider.max = Math.max(20, Math.max(...demands) + 2); }
+  const capEl = document.getElementById('lvCapVal');
+  if (capEl) capEl.textContent = cap;
+
+  // Chart
+  document.getElementById('lvChartWrap').innerHTML = buildLvChart(demands, cap);
+
+  // Month cards (only non-zero months)
+  const cards = GCOLS.map((m, i) => {
+    const d = demands[i];
+    if (d === 0) return '';
+    const delta   = cap - d;
+    const isOver  = delta < 0;
+    const sign    = delta > 0 ? '+' : '';
+    const bg      = isOver ? '#FEF2F2' : '#F0FDF4';
+    const border  = isOver ? '#FECACA' : '#BBF7D0';
+    const dColor  = isOver ? '#DC2626' : '#16A34A';
+    const barPct  = Math.min(100, Math.round((d / Math.max(d, cap)) * 100));
+    const fillCol = isOver ? '#DC2626' : '#0369A1';
+    const icon    = isOver ? '⚠' : '✓';
+    return `<div class="lv-card" style="background:${bg};border:1.5px solid ${border}">
+      <div class="lv-card-month">${m}</div>
+      <div class="lv-card-demand">${d}</div>
+      <div class="lv-card-label">FTE demand</div>
+      <div class="lv-card-minibar"><div class="lv-card-minibar-fill" style="width:${barPct}%;background:${fillCol}"></div></div>
+      <div class="lv-card-delta" style="color:${dColor}">${icon} ${sign}${delta}</div>
+      <div class="lv-card-dlabel" style="color:${dColor}">${isOver ? 'shortfall' : 'surplus'}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('lvCards').innerHTML = cards;
+
+  // Stats strip
+  const nonZero     = demands.filter(d => d > 0);
+  const peak        = nonZero.length ? Math.max(...nonZero) : 0;
+  const avg         = nonZero.length ? +(nonZero.reduce((a,b)=>a+b,0)/nonZero.length).toFixed(1) : 0;
+  const overMonths  = demands.filter(d => d > cap).length;
+  const totalShort  = demands.reduce((s, d) => s + Math.max(0, d - cap), 0);
+  const totalSurp   = nonZero.reduce((s, d) => s + Math.max(0, cap - d), 0);
+  const overColor   = overMonths > 0 ? '#F87171' : '#4ADE80';
+
+  document.getElementById('lvStats').innerHTML = [
+    { v: peak,             l: 'Peak Demand',      c: '#F87171' },
+    { v: avg,              l: 'Avg Demand',        c: '#93C5FD' },
+    { v: cap,              l: 'Squad Size',        c: '#FCD34D' },
+    { v: `${overMonths}m`, l: 'Months Over Cap',  c: overColor },
+    { v: `+${totalShort}`, l: 'Total Shortfall',  c: '#F87171' },
+    { v: `+${totalSurp}`,  l: 'Total Surplus',    c: '#4ADE80' },
+  ].map(s => `<div class="lv-stat"><div class="lv-stat-val" style="color:${s.c}">${s.v}</div><div class="lv-stat-lbl">${s.l}</div></div>`).join('');
+}
+
+// ─── Cloud Sync (GitHub Gist) ─────────────────────────────────────────────────
+const GITHUB_API = 'https://api.github.com';
+const GIST_FILE  = 'aar_programs_of_work.json';
+const JBIN_URL   = 'https://api.jsonbin.io/v3/b'; // retained for backward-compat with old JSONbin links
+let binId        = null;   // gist ID (or jsonbin bin ID for old links)
+let masterKey    = null;   // GitHub PAT (or jsonbin key for old links)
+let backendType  = null;   // 'gist' | 'jsonbin'
+let cloudTimer   = null;
+
+function parseHashConfig() {
+  try {
+    const h = window.location.hash.slice(1);
+    const p = new URLSearchParams(h);
+    const gist  = p.get('gist')  || null;
+    const token = p.get('token') || null;
+    const bin   = p.get('bin')   || null;
+    const key   = p.get('key')   || null;
+    if (gist)  return { type: 'gist',    id: gist, secret: token };
+    if (bin)   return { type: 'jsonbin', id: bin,  secret: key   };
+    return {};
+  } catch { return {}; }
+}
+
+function setHashConfig(type, id, secret) {
+  const p = new URLSearchParams();
+  if (type === 'gist') { p.set('gist', id); p.set('token', secret); }
+  else                 { p.set('bin',  id); p.set('key',   secret); }
+  history.replaceState(null, '', '#' + p.toString());
+}
+
+function setSyncBadge(state, msg) {
+  const el = document.getElementById('syncBadge');
+  if (!el) return;
+  const map = {
+    local:   ['#94A3B8', '☁ Local only'],
+    loading: ['#F59E0B', '⟳ Loading…'],
+    ready:   ['#16A34A', '✓ Synced'],
+    saving:  ['#F59E0B', '⟳ Saving…'],
+    error:   ['#DC2626', '⚠ Sync error'],
+  };
+  const [color, defaultMsg] = map[state] || map.local;
+  el.style.color       = color;
+  el.style.borderColor = color;
+  el.textContent       = msg || defaultMsg;
+}
+
+async function initCloud() {
+  const cfg = parseHashConfig();
+  if (cfg.id && cfg.secret) {
+    binId = cfg.id; masterKey = cfg.secret; backendType = cfg.type;
+    setSyncBadge('loading');
+    try {
+      let data;
+      if (cfg.type === 'gist') {
+        const r = await fetch(`${GITHUB_API}/gists/${cfg.id}`, {
+          headers: { 'Authorization': `Bearer ${cfg.secret}`, 'Accept': 'application/vnd.github+json' }
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const gist = await r.json();
+        const raw  = gist.files?.[GIST_FILE]?.content;
+        data = raw ? JSON.parse(raw) : null;
+      } else {
+        // Legacy JSONbin support
+        const r = await fetch(`${JBIN_URL}/${cfg.id}/latest`, {
+          headers: { 'X-Master-Key': cfg.secret, 'X-Bin-Meta': 'false' }
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const json = await r.json();
+        data = json.record;
+      }
+      if (Array.isArray(data)) {
+        projects = data;
+        migrateProjects();
+        nextProjId = Math.max(...projects.map(p => p.id), 18) + 1;
+      }
+      setSyncBadge('ready');
+    } catch (e) {
+      setSyncBadge('error', '⚠ Load failed — using local data');
+      console.warn('Cloud load error:', e);
+    }
+  } else {
+    setSyncBadge('local');
+  }
+  renderStats();
+  render();
+}
+
+function openCloudModal() {
+  const hasCfg = !!(binId && masterKey);
+  document.getElementById('cloudActivePanel').style.display  = hasCfg ? '' : 'none';
+  document.getElementById('cloudSetupPanel').style.display   = hasCfg ? 'none' : '';
+  document.getElementById('cloudSetupFooter').style.display  = hasCfg ? 'none' : '';
+  document.getElementById('moCloudTitle').textContent        = hasCfg ? '☁ Cloud Sync' : '☁ Enable Cloud Sync';
+  if (hasCfg) document.getElementById('shareUrlInput').value = window.location.href;
+  document.getElementById('moCloud').classList.add('open');
+}
+
+async function setupCloud() {
+  const token = (document.getElementById('cloudKey').value || '').trim();
+  if (!token) { document.getElementById('cloudKey').focus(); return; }
+  const statusEl = document.getElementById('cloudSetupStatus');
+  statusEl.style.color = '#F59E0B';
+  statusEl.textContent = '⟳ Creating GitHub Gist…';
+  try {
+    const r = await fetch(`${GITHUB_API}/gists`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json'
+      },
+      body: JSON.stringify({
+        description: 'AAR Programs of Work — Timeline Manager Data',
+        public: true,
+        files: { [GIST_FILE]: { content: JSON.stringify(projects, null, 2) } }
+      })
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(r.status === 401
+        ? 'Invalid token — make sure it has the "gist" scope and hasn\'t expired'
+        : `GitHub error ${r.status}: ${err.message || 'unknown'}`);
+    }
+    const gist = await r.json();
+    binId = gist.id; masterKey = token; backendType = 'gist';
+    setHashConfig('gist', gist.id, token);
+    statusEl.style.color = '#16A34A';
+    statusEl.textContent = '✓ GitHub Gist created — your data is live!';
+    setSyncBadge('ready');
+    setTimeout(() => { openCloudModal(); copyShareUrl(true); }, 900);
+  } catch(e) {
+    statusEl.style.color = '#DC2626';
+    statusEl.textContent = '⚠ ' + (e.message || 'Setup failed');
+  }
+}
+
+function copyShareUrl(notify) {
+  const url = window.location.href;
+  const inp = document.getElementById('shareUrlInput');
+  if (inp) inp.value = url;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('shareBtn');
+    if (btn) { const t = btn.textContent; btn.textContent = '✓ Copied!'; setTimeout(() => btn.textContent = t, 2200); }
+    if (notify && binId) {
+      alert('☁ Cloud sync is ready!\n\nThe share URL has been copied to your clipboard.\nSend it to your team — anyone with the link can view and edit.');
+    }
+  }).catch(() => { prompt('Copy this URL and share with your team:', url); });
+}
+
+// ─── Keys ─────────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') { closeModal('mo'); closeModal('mop'); closeModal('moCloud'); }
+  if ((e.metaKey||e.ctrlKey) && e.key==='k') { e.preventDefault(); openModal(); }
+});
+
+initCloud();
+</script>
+</body>
+</html>
