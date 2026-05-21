@@ -1602,7 +1602,13 @@ function setLvSub(sub, el) {
 }
 
 function getLvDemands() {
-  if (lvSub === 'combined') return XLS_DATA.total;
+  // Combined = Reg resources + Non-Reg resources (dynamic, from projects)
+  if (lvSub === 'combined') {
+    return GCOLS.map((_, i) => {
+      const ps = getMonthProjects(i);
+      return ps.reduce((s, p) => s + (p.resources || 0), 0);
+    });
+  }
   if (lvSub === 'se' || lvSub === 'ta') {
     return computePhaseDemand().map(d => lvSub === 'se' ? d.totalSE : d.totalTA);
   }
