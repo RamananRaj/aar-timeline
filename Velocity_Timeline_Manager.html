@@ -94,6 +94,9 @@ input[type=search]{width:180px}
 .g-phase-bars{flex:1;position:relative;height:32px}
 .g-pbar{position:absolute;top:7px;height:17px;border-radius:2px;cursor:pointer;display:flex;align-items:center;padding:0 5px;min-width:4px;opacity:.92;transition:opacity .15s}
 .g-pbar:hover{opacity:1;filter:brightness(.88)}
+.g-pbar:not(.g-pbar-tbd){cursor:grab;}
+.g-pbar.drag-on{cursor:grabbing;opacity:.75;z-index:100;box-shadow:0 3px 14px rgba(0,0,0,.28);}
+body.drag-active *{cursor:grabbing!important;user-select:none;}
 .g-pbar-lbl{font-size:8px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .g-pbar-tbd{background:transparent!important;border-style:dashed;border-width:1.5px;top:8px;height:15px}
 
@@ -319,6 +322,8 @@ input[type=search]{width:180px}
   <!-- Sub-tabs -->
   <div style="display:flex;gap:0;background:#F1F5F9;border-radius:7px;padding:3px;width:fit-content;margin-bottom:16px">
     <button class="lvtab active" onclick="setLvSub('combined',this)">Combined</button>
+    <button class="lvtab" onclick="setLvSub('se',this)">SE Levelling</button>
+    <button class="lvtab" onclick="setLvSub('ta',this)">TA Levelling</button>
     <button class="lvtab" onclick="setLvSub('reg',this)">Regulatory</button>
     <button class="lvtab" onclick="setLvSub('nonreg',this)">Non-Reg / GPS</button>
   </div>
@@ -819,7 +824,7 @@ function phaseBarHtml(ph, projId) {
     const w  = Math.max(0.5, x2 - x1);
     bar = `<div class="g-pbar" style="left:${x1.toFixed(2)}%;width:${w.toFixed(2)}%;background:${ph.color}"
       onmouseenter="showPhaseTip(event,${projId},${ph.id})" onmouseleave="hideTip()"
-      onclick="openPhaseModal(${projId},${ph.id})">
+      onmousedown="startPhaseDrag(event,this,${projId},${ph.id})">
       <span class="g-pbar-lbl">${ph.name}${resStr}</span>
     </div>`;
   }
@@ -1571,6 +1576,9 @@ function setLvSub(sub, el) {
 
 function getLvDemands() {
   if (lvSub === 'combined') return XLS_DATA.total;
+  if (lvSub === 'se' || lvSub === 'ta') {
+    return computePhaseDemand().map(d => lvSub === 'se' ? d.totalSE : d.totalTA);
+  }
   const isReg = lvSub === 'reg';
   return GCOLS.map((_, i) => {
     const ps = getMonthProjects(i).filter(p => isReg ? p.squad === 'reg-squad' : p.squad !== 'reg-squad');
@@ -1647,6 +1655,18 @@ function buildLvChart(demands, cap) {
 }
 
 function renderLvView() {
+  // SE / TA levelling — stacked per-project bars
+  if (lvSub === 'se' || lvSub === 'ta') {
+    renderStackedRoleLv();
+    return;
+  }
+
+  // Show slider for non-SE/TA views
+  const sliderWrap = document.querySelector('.lv-slider-wrap');
+  if (sliderWrap) sliderWrap.style.display = '';
+  const lvLeg = document.querySelector('.lv-legend');
+  if (lvLeg) lvLeg.style.display = '';
+
   const demands = getLvDemands();
   const cap     = lvCap[lvSub];
 
@@ -1850,6 +1870,284 @@ function copyShareUrl(notify) {
     }
   }).catch(() => { prompt('Copy this URL and share with your team:', url); });
 }
+
+// ─── Phase date shift helper ──────────────────────────────────────────────────
+function shiftDate(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// ─── Per-project, per-month SE & TA demand (computed from phase seFte/taFte) ──
+function computePhaseDemand() {
+  return GCOLS.map((mo, mi) => {
+    const year = 2026, month = 4 + mi;           // May=4 (0-indexed)
+    const ms = new Date(year, month, 1);
+    const me = new Date(year, month + 1, 0);     // last day of month
+
+    const byProject = projects.map(p => {
+      let se = 0, ta = 0;
+      (p.phases || []).forEach(ph => {
+        if (!ph.startDate || !ph.endDate) return;
+        const ps = new Date(ph.startDate), pe = new Date(ph.endDate);
+        if (ps <= me && pe >= ms) {
+          se += (ph.seFte || 0);
+          ta += (ph.taFte || 0);
+        }
+      });
+      return { id: p.id, name: p.name, stream: p.stream, squad: p.squad, se, ta };
+    });
+
+    const regP    = byProject.filter(p => p.squad === 'reg-squad');
+    const nonregP = byProject.filter(p => p.squad !== 'reg-squad');
+    return {
+      month:    mo,
+      byProject,
+      totalSE:  byProject.reduce((s, p) => s + p.se,  0),
+      totalTA:  byProject.reduce((s, p) => s + p.ta,  0),
+      regSE:    regP.reduce(   (s, p) => s + p.se,  0),
+      regTA:    regP.reduce(   (s, p) => s + p.ta,  0),
+      nonregSE: nonregP.reduce((s, p) => s + p.se,  0),
+      nonregTA: nonregP.reduce((s, p) => s + p.ta,  0),
+    };
+  });
+}
+
+// ─── Stream-based color palettes for stacked bars ────────────────────────────
+const STREAM_PALETTES = {
+  reg:    ['#EF4444','#F97316','#F59E0B','#DC2626','#C2410C','#D97706','#B91C1C','#EA580C'],
+  nonreg: ['#A855F7','#9333EA','#7C3AED','#6D28D9'],
+  gps:    ['#3B82F6','#2563EB','#1D4ED8','#0284C7','#0891B2','#0369A1'],
+  bau:    ['#06B6D4','#0891B2'],
+};
+const _streamIdx = {};
+const _projColorCache = {};
+function projColor(p) {
+  if (_projColorCache[p.id]) return _projColorCache[p.id];
+  const si = _streamIdx[p.stream] = (_streamIdx[p.stream] || 0);
+  const pal = STREAM_PALETTES[p.stream] || ['#64748B'];
+  _projColorCache[p.id] = pal[si % pal.length];
+  _streamIdx[p.stream]++;
+  return _projColorCache[p.id];
+}
+
+// ─── SVG stacked chart: one segment per project, role = 'se' | 'ta' ──────────
+function buildStackedRoleSVG(demand, role) {
+  const W = 720, H = 230, PL = 36, PB = 30, PT = 22;
+  const chartW = W - PL - 8;
+  const chartH = H - PB - PT;
+  const n      = demand.length;
+  const slotW  = chartW / n;
+  const barW   = slotW * 0.56;
+  const barOff = (slotW - barW) / 2;
+
+  const maxVal = Math.max(...demand.map(d => role === 'se' ? d.totalSE : d.totalTA), 1);
+  const step   = maxVal <= 5 ? 1 : maxVal <= 10 ? 2 : maxVal <= 20 ? 4 : 5;
+
+  let els = '';
+
+  // Grid + Y-axis ticks
+  for (let t = 0; t <= maxVal + step; t += step) {
+    const y = (PT + chartH - (t / maxVal) * chartH).toFixed(1);
+    els += `<line x1="${PL}" y1="${y}" x2="${W-4}" y2="${y}" stroke="#F1F5F9" stroke-width="1"/>`;
+    els += `<text x="${PL-4}" y="${(+y+3).toFixed(1)}" text-anchor="end" fill="#CBD5E1" font-size="9" font-family="system-ui,sans-serif">${t}</text>`;
+  }
+
+  // Stacked bars
+  demand.forEach((d, i) => {
+    const x    = PL + i * slotW + barOff;
+    const vals = d.byProject.filter(bp => (role === 'se' ? bp.se : bp.ta) > 0);
+
+    if (!vals.length) {
+      els += `<text x="${(x+barW/2).toFixed(1)}" y="${(H-8).toFixed(1)}" text-anchor="middle" fill="#E2E8F0" font-size="10" font-family="system-ui,sans-serif">${d.month}</text>`;
+      return;
+    }
+
+    // Reg on bottom, non-reg on top (visual grouping)
+    const sorted = [...vals].sort((a, b) => {
+      const o = { reg:0, bau:1, nonreg:2, gps:3 };
+      return (o[a.stream]||2) - (o[b.stream]||2);
+    });
+
+    let curY  = PT + chartH;
+    let total = 0;
+    sorted.forEach(bp => {
+      const val = role === 'se' ? bp.se : bp.ta;
+      const h   = (val / maxVal) * chartH;
+      const y   = curY - h;
+      const col = projColor(projects.find(p => p.id === bp.id) || bp);
+      els += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${col}" rx="2" opacity=".9">
+        <title>${bp.name}: ${val} ${role.toUpperCase()}</title>
+      </rect>`;
+      curY  -= h;
+      total += val;
+    });
+
+    // Total label on top
+    const labelStr = total % 1 === 0 ? total : total.toFixed(1);
+    els += `<text x="${(x+barW/2).toFixed(1)}" y="${(curY-5).toFixed(1)}" text-anchor="middle" fill="#374151" font-size="11" font-weight="700" font-family="system-ui,sans-serif">${labelStr}</text>`;
+
+    // Month label
+    els += `<text x="${(x+barW/2).toFixed(1)}" y="${(H-8).toFixed(1)}" text-anchor="middle" fill="#374151" font-size="10" font-family="system-ui,sans-serif">${d.month}</text>`;
+  });
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">${els}</svg>`;
+}
+
+// ─── Render SE / TA levelling view ────────────────────────────────────────────
+function renderStackedRoleLv() {
+  const demand = computePhaseDemand();
+  const role   = lvSub; // 'se' | 'ta'
+  const label  = role === 'se' ? 'Software Engineer (SE)' : 'Test Analyst (TA)';
+  const color  = role === 'se' ? '#0369A1' : '#D97706';
+
+  // Hide capacity slider & capacity legend (not relevant for SE/TA breakdown)
+  const sliderWrap = document.querySelector('.lv-slider-wrap');
+  if (sliderWrap) sliderWrap.style.display = 'none';
+
+  // Chart
+  document.getElementById('lvChartWrap').innerHTML = buildStackedRoleSVG(demand, role);
+
+  // Replace lv-legend with project colour legend
+  const lvLeg = document.querySelector('.lv-legend');
+  if (lvLeg) {
+    // Collect all projects that have demand this period
+    const seenIds = new Set();
+    demand.forEach(d => d.byProject.forEach(bp => {
+      if ((role === 'se' ? bp.se : bp.ta) > 0) seenIds.add(bp.id);
+    }));
+    const activeProjs = projects.filter(p => seenIds.has(p.id));
+    lvLeg.innerHTML = activeProjs.map(p =>
+      `<span><span class="res-leg-dot" style="background:${projColor(p)}"></span>${p.name.length > 38 ? p.name.slice(0,36)+'…' : p.name}</span>`
+    ).join('');
+    lvLeg.style.display = '';
+  }
+
+  // Month summary cards
+  const vals   = demand.map(d => role === 'se' ? d.totalSE : d.totalTA);
+  const maxVal = Math.max(...vals, 1);
+  const cards  = demand.map((d, i) => {
+    const val  = vals[i];
+    if (!val) return '';
+    const barPct = Math.round(val / maxVal * 100);
+    return `<div class="lv-card" style="background:#F8FAFC;border:1.5px solid #E2E8F0">
+      <div class="lv-card-month">${d.month}</div>
+      <div class="lv-card-demand" style="font-size:22px;color:${color}">${val % 1 === 0 ? val : val.toFixed(1)}</div>
+      <div class="lv-card-label">${label}s</div>
+      <div class="lv-card-minibar"><div class="lv-card-minibar-fill" style="width:${barPct}%;background:${color}"></div></div>
+      <div style="font-size:10px;color:#94A3B8;margin-top:4px">
+        <span style="color:#DC2626">Reg ${(role==='se'?d.regSE:d.regTA)%1===0?(role==='se'?d.regSE:d.regTA):(role==='se'?d.regSE:d.regTA).toFixed(1)}</span>
+        &nbsp;+&nbsp;
+        <span style="color:#7C3AED">NR ${(role==='se'?d.nonregSE:d.nonregTA)%1===0?(role==='se'?d.nonregSE:d.nonregTA):(role==='se'?d.nonregSE:d.nonregTA).toFixed(1)}</span>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('lvCards').innerHTML = cards;
+
+  // Stats strip
+  const nonZero = vals.filter(v => v > 0);
+  const peak    = nonZero.length ? Math.max(...nonZero) : 0;
+  const avg     = nonZero.length ? +(nonZero.reduce((a,b)=>a+b,0)/nonZero.length).toFixed(1) : 0;
+  const regTotal    = demand.reduce((s,d)=>s+(role==='se'?d.regSE:d.regTA),0);
+  const nonregTotal = demand.reduce((s,d)=>s+(role==='se'?d.nonregSE:d.nonregTA),0);
+
+  document.getElementById('lvStats').innerHTML = [
+    { v: peak % 1 === 0 ? peak : peak.toFixed(1), l:`Peak ${role.toUpperCase()} Demand`, c:'#F87171' },
+    { v: avg,                                       l:`Avg ${role.toUpperCase()}/month`,   c:'#93C5FD' },
+    { v: regTotal    % 1 === 0 ? regTotal    : regTotal.toFixed(1),    l:'Reg Total',     c:'#EF4444' },
+    { v: nonregTotal % 1 === 0 ? nonregTotal : nonregTotal.toFixed(1), l:'Non-Reg Total', c:'#A78BFA' },
+    { v: (regTotal+nonregTotal) % 1 === 0 ? (regTotal+nonregTotal) : (regTotal+nonregTotal).toFixed(1), l:'Combined Total', c:'#4ADE80' },
+  ].map(s=>`<div class="lv-stat"><div class="lv-stat-val" style="color:${s.c}">${s.v}</div><div class="lv-stat-lbl">${s.l}</div></div>`).join('');
+}
+
+// ─── Phase drag — move bars on the Gantt to shift phase dates ─────────────────
+let phaseDragState = null;
+let phaseDragMoved = false;
+
+function startPhaseDrag(e, barEl, projId, phaseId) {
+  if (e.button !== 0) return;          // left-click only
+  e.stopPropagation();
+  hideTip();
+
+  const area = barEl.closest('.g-phase-bars');
+  if (!area) return;
+
+  const p  = projects.find(x => x.id === projId);
+  const ph = (p?.phases || []).find(x => x.id === phaseId);
+  if (!ph || !ph.startDate || !ph.endDate) {
+    // TBD phase — open modal
+    openPhaseModal(projId, phaseId);
+    return;
+  }
+
+  phaseDragState = {
+    projId, phaseId,
+    areaRect: area.getBoundingClientRect(),
+    startX:   e.clientX,
+    origStart: ph.startDate,
+    origEnd:   ph.endDate,
+    barEl,
+  };
+  phaseDragMoved = false;
+}
+
+document.addEventListener('mousemove', e => {
+  if (!phaseDragState) return;
+  const dx = Math.abs(e.clientX - phaseDragState.startX);
+  if (dx < 5) return;                  // minimum drag threshold
+
+  phaseDragMoved = true;
+  if (!phaseDragState.barEl.classList.contains('drag-on')) {
+    phaseDragState.barEl.classList.add('drag-on');
+    document.body.classList.add('drag-active');
+  }
+
+  const { projId, phaseId, areaRect, startX, origStart, origEnd } = phaseDragState;
+  const deltaX    = e.clientX - startX;
+  const deltaDays = Math.round(deltaX / areaRect.width * GTOTAL);
+
+  const p  = projects.find(x => x.id === projId);
+  const ph = (p?.phases || []).find(x => x.id === phaseId);
+  if (!ph) return;
+
+  ph.startDate = shiftDate(origStart, deltaDays);
+  ph.endDate   = shiftDate(origEnd,   deltaDays);
+
+  // Move the bar visually without full DOM rebuild
+  const x1 = pct(ph.startDate), x2 = pct(ph.endDate);
+  const w  = Math.max(0.4, x2 - x1);
+  phaseDragState.barEl.style.left  = `${x1.toFixed(2)}%`;
+  phaseDragState.barEl.style.width = `${w.toFixed(2)}%`;
+
+  // Live-update the levelling view if open (throttled to ~30fps)
+  const now = Date.now();
+  if (now - (phaseDragState.lastUpdate || 0) > 33) {
+    phaseDragState.lastUpdate = now;
+    if (document.getElementById('lvView').style.display  !== 'none') renderLvView();
+    if (document.getElementById('resView').style.display !== 'none') renderResView();
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (!phaseDragState) return;
+  const { projId, phaseId, barEl } = phaseDragState;
+
+  if (phaseDragMoved) {
+    // Commit: persist + rebuild Gantt + update both resource views
+    persist();
+    render();
+    if (document.getElementById('lvView').style.display  !== 'none') renderLvView();
+    if (document.getElementById('resView').style.display !== 'none') renderResView();
+  } else {
+    // No movement — treat as a click → open phase edit modal
+    openPhaseModal(projId, phaseId);
+  }
+
+  if (barEl) barEl.classList.remove('drag-on');
+  document.body.classList.remove('drag-active');
+  phaseDragState = null;
+  phaseDragMoved = false;
+});
 
 // ─── Keys ─────────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
