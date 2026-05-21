@@ -44,7 +44,7 @@ input[type=search]{width:180px}
 .vtab.active{background:#fff;color:#0F2544;box-shadow:0 1px 3px rgba(0,0,0,.12)}
 
 .main{padding:16px 24px 40px}
-.gantt-card{background:#fff;border-radius:8px;border:1px solid #E2E8F0;overflow:hidden}
+.gantt-card{background:#fff;border-radius:8px;border:1px solid #E2E8F0;overflow:visible}
 
 /* Gantt header */
 .gantt-head{display:flex;background:#F8FAFC;border-bottom:2px solid #E2E8F0}
@@ -216,6 +216,24 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
 .lv-stat:last-child{border-right:none}
 .lv-stat-val{font-size:20px;font-weight:700;color:#fff;line-height:1}
 .lv-stat-lbl{font-size:9px;color:#64748B;text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+
+/* ── Timeline pan & zoom ──────────────────────────────── */
+/* Zoom control bar */
+.gantt-zoom-bar{display:flex;align-items:center;gap:6px;padding:0 0 10px;flex-wrap:wrap}
+.g-zoom-btn{padding:4px 12px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid #CBD5E1;background:#fff;color:#374151;transition:all .15s;white-space:nowrap;line-height:1.5}
+.g-zoom-btn:hover{background:#F1F5F9;border-color:#94A3B8}
+.g-zoom-btn:disabled{opacity:.35;cursor:default}
+.g-zoom-reset{color:#0D9488;border-color:#0D9488}
+.g-zoom-reset:hover{background:#F0FDF9}
+.gantt-zoom-lbl{font-size:11px;color:#94A3B8;flex:1;text-align:center;white-space:nowrap}
+/* Freeze info column when ganttWrapper scrolls horizontally */
+.gh-info{position:sticky;left:0;z-index:15;background:#F8FAFC}
+.g-info{position:sticky;left:0;z-index:10;background:#fff}
+.g-row:hover .g-info{background:#FAFBFC}
+.g-sec-info{position:sticky;left:0;z-index:10;background:#F8FAFC}
+.g-phase-info{position:sticky;left:0;z-index:10;background:#FAFEFF}
+.g-phase-info:hover{background:#F0FDF9}
+.g-add-phase-btn{position:sticky;left:0;z-index:10;background:#F8FFF9}
 </style>
 </head>
 <body>
@@ -280,7 +298,16 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
 </div>
 
 <div class="main" id="ganttMain">
-  <div class="gantt-card" id="gantt"></div>
+  <div class="gantt-zoom-bar">
+    <button class="g-zoom-btn" onclick="ganttZoomOut()" title="Zoom out — show more of the timeline">− Zoom Out</button>
+    <button class="g-zoom-btn g-zoom-reset" onclick="ganttResetZoom()" title="Reset to full May–Dec view">⊙ Reset View</button>
+    <button class="g-zoom-btn" onclick="ganttZoomIn()" title="Zoom in — show more detail per month">+ Zoom In</button>
+    <span class="gantt-zoom-lbl" id="ganttZoomLbl">May – Dec 2026 · drag timeline to pan</span>
+    <span style="font-size:10px;color:#CBD5E1;white-space:nowrap">Ctrl + scroll to zoom</span>
+  </div>
+  <div id="ganttWrapper" style="overflow-x:auto;border-radius:8px;-webkit-overflow-scrolling:touch;cursor:grab;user-select:none">
+    <div class="gantt-card" id="gantt"></div>
+  </div>
 </div>
 
 <!-- ── Resource View ── -->
@@ -1565,7 +1592,7 @@ function renderSquadModel(demands) {
 
 // ─── Resource Levelling View ───────────────────────────────────────────────────
 let lvSub = 'combined';
-let lvCap = { combined: 8, reg: 5, nonreg: 5 };
+let lvCap = { combined: 8, reg: 5, nonreg: 5, se: 8, ta: 5 };
 
 function setLvSub(sub, el) {
   lvSub = sub;
@@ -1931,133 +1958,175 @@ function projColor(p) {
   return _projColorCache[p.id];
 }
 
-// ─── SVG stacked chart: one segment per project, role = 'se' | 'ta' ──────────
-function buildStackedRoleSVG(demand, role) {
-  const W = 720, H = 230, PL = 36, PB = 30, PT = 22;
+// ─── SVG grouped chart: two bars per month (SE left, TA right) ───────────────
+//     Each bar = Reg (red bottom) + Non-Reg (purple top) + capacity line
+function buildGroupedRoleSVG(demand, cap) {
+  const W = 720, H = 250, PL = 36, PB = 40, PT = 22;
   const chartW = W - PL - 8;
   const chartH = H - PB - PT;
   const n      = demand.length;
   const slotW  = chartW / n;
-  const barW   = slotW * 0.56;
-  const barOff = (slotW - barW) / 2;
+  const barW   = Math.min(28, slotW * 0.3);   // individual bar width
+  const gap    = 4;                             // gap between SE and TA bar
+  const offset = (slotW - barW * 2 - gap) / 2; // left padding inside slot
 
-  const maxVal = Math.max(...demand.map(d => role === 'se' ? d.totalSE : d.totalTA), 1);
+  const maxSE  = Math.max(...demand.map(d => d.totalSE), 0);
+  const maxTA  = Math.max(...demand.map(d => d.totalTA), 0);
+  const maxVal = Math.max(maxSE, maxTA, cap, 1);
   const step   = maxVal <= 5 ? 1 : maxVal <= 10 ? 2 : maxVal <= 20 ? 4 : 5;
+  const capY   = PT + chartH - (cap / maxVal) * chartH;
 
   let els = '';
 
-  // Grid + Y-axis ticks
+  // Surplus zone
+  els += `<rect x="${PL}" y="${capY.toFixed(1)}" width="${chartW}" height="${Math.max(0, PT + chartH - capY).toFixed(1)}" fill="#F0FDF4" opacity=".4" rx="2"/>`;
+
+  // Grid lines + Y-axis
   for (let t = 0; t <= maxVal + step; t += step) {
     const y = (PT + chartH - (t / maxVal) * chartH).toFixed(1);
     els += `<line x1="${PL}" y1="${y}" x2="${W-4}" y2="${y}" stroke="#F1F5F9" stroke-width="1"/>`;
     els += `<text x="${PL-4}" y="${(+y+3).toFixed(1)}" text-anchor="end" fill="#CBD5E1" font-size="9" font-family="system-ui,sans-serif">${t}</text>`;
   }
 
-  // Stacked bars
-  demand.forEach((d, i) => {
-    const x    = PL + i * slotW + barOff;
-    const vals = d.byProject.filter(bp => (role === 'se' ? bp.se : bp.ta) > 0);
-
-    if (!vals.length) {
-      els += `<text x="${(x+barW/2).toFixed(1)}" y="${(H-8).toFixed(1)}" text-anchor="middle" fill="#E2E8F0" font-size="10" font-family="system-ui,sans-serif">${d.month}</text>`;
-      return;
+  // Helper: draw one stacked bar (Reg red + NonReg purple)
+  function drawBar(x, regVal, nrVal) {
+    const total = regVal + nrVal;
+    if (!total) return { svg: '', topY: PT + chartH };
+    let curY = PT + chartH, svg = '';
+    if (regVal > 0) {
+      const h = (regVal / maxVal) * chartH;
+      curY -= h;
+      svg += `<rect x="${x.toFixed(1)}" y="${curY.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="#DC2626" rx="2" opacity=".87">
+        <title>Reg: ${regVal % 1 === 0 ? regVal : regVal.toFixed(1)}</title></rect>`;
     }
+    if (nrVal > 0) {
+      const h = (nrVal / maxVal) * chartH;
+      curY -= h;
+      svg += `<rect x="${x.toFixed(1)}" y="${curY.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="#7C3AED" rx="2" opacity=".87">
+        <title>Non-Reg: ${nrVal % 1 === 0 ? nrVal : nrVal.toFixed(1)}</title></rect>`;
+    }
+    const topY  = curY;
+    const isOver = total > cap;
+    const lbl   = total % 1 === 0 ? total : total.toFixed(1);
+    if (isOver) {
+      svg += `<text x="${(x+barW/2).toFixed(1)}" y="${(topY-4).toFixed(1)}" text-anchor="middle" fill="#DC2626" font-size="9" font-weight="800" font-family="system-ui,sans-serif">▲${+(total-cap).toFixed(1)}</text>`;
+    } else {
+      svg += `<text x="${(x+barW/2).toFixed(1)}" y="${(topY-4).toFixed(1)}" text-anchor="middle" fill="#374151" font-size="9" font-weight="700" font-family="system-ui,sans-serif">${lbl}</text>`;
+    }
+    return { svg, topY };
+  }
 
-    // Reg on bottom, non-reg on top (visual grouping)
-    const sorted = [...vals].sort((a, b) => {
-      const o = { reg:0, bau:1, nonreg:2, gps:3 };
-      return (o[a.stream]||2) - (o[b.stream]||2);
-    });
+  demand.forEach((d, i) => {
+    const slotX = PL + i * slotW;
+    const seX   = slotX + offset;
+    const taX   = seX + barW + gap;
+    const midX  = slotX + slotW / 2;
 
-    let curY  = PT + chartH;
-    let total = 0;
-    sorted.forEach(bp => {
-      const val = role === 'se' ? bp.se : bp.ta;
-      const h   = (val / maxVal) * chartH;
-      const y   = curY - h;
-      const col = projColor(projects.find(p => p.id === bp.id) || bp);
-      els += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${col}" rx="2" opacity=".9">
-        <title>${bp.name}: ${val} ${role.toUpperCase()}</title>
-      </rect>`;
-      curY  -= h;
-      total += val;
-    });
+    const { svg: seSvg } = drawBar(seX, d.regSE,    d.nonregSE);
+    const { svg: taSvg } = drawBar(taX, d.regTA,    d.nonregTA);
+    els += seSvg + taSvg;
 
-    // Total label on top
-    const labelStr = total % 1 === 0 ? total : total.toFixed(1);
-    els += `<text x="${(x+barW/2).toFixed(1)}" y="${(curY-5).toFixed(1)}" text-anchor="middle" fill="#374151" font-size="11" font-weight="700" font-family="system-ui,sans-serif">${labelStr}</text>`;
-
-    // Month label
-    els += `<text x="${(x+barW/2).toFixed(1)}" y="${(H-8).toFixed(1)}" text-anchor="middle" fill="#374151" font-size="10" font-family="system-ui,sans-serif">${d.month}</text>`;
+    // SE / TA micro-labels under each bar
+    const lblY = H - 22;
+    if (d.totalSE > 0 || d.totalTA > 0) {
+      els += `<text x="${(seX+barW/2).toFixed(1)}" y="${lblY.toFixed(1)}" text-anchor="middle" fill="#0369A1" font-size="8" font-weight="700" font-family="system-ui,sans-serif">SE</text>`;
+      els += `<text x="${(taX+barW/2).toFixed(1)}" y="${lblY.toFixed(1)}" text-anchor="middle" fill="#D97706" font-size="8" font-weight="700" font-family="system-ui,sans-serif">TA</text>`;
+    }
+    // Month label centred under the pair
+    els += `<text x="${midX.toFixed(1)}" y="${(H-8).toFixed(1)}" text-anchor="middle" fill="#374151" font-size="10" font-family="system-ui,sans-serif">${d.month}</text>`;
   });
+
+  // Capacity dashed line
+  els += `<line x1="${PL}" y1="${capY.toFixed(1)}" x2="${W-4}" y2="${capY.toFixed(1)}" stroke="#F59E0B" stroke-width="2.5" stroke-dasharray="7,4"/>`;
+  els += `<circle cx="${(PL+4).toFixed(1)}" cy="${capY.toFixed(1)}" r="5" fill="#F59E0B"/>`;
+  els += `<text x="${W-6}" y="${(capY-7).toFixed(1)}" text-anchor="end" fill="#F59E0B" font-size="10" font-weight="700" font-family="system-ui,sans-serif">▶ ${cap} FTE</text>`;
 
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">${els}</svg>`;
 }
 
-// ─── Render SE / TA levelling view ────────────────────────────────────────────
+// ─── Render SE & TA side-by-side levelling view ───────────────────────────────
 function renderStackedRoleLv() {
   const demand = computePhaseDemand();
-  const role   = lvSub; // 'se' | 'ta'
-  const label  = role === 'se' ? 'Software Engineer (SE)' : 'Test Analyst (TA)';
-  const color  = role === 'se' ? '#0369A1' : '#D97706';
+  const cap    = lvCap['se'];   // single shared capacity threshold
 
-  // Hide capacity slider & capacity legend (not relevant for SE/TA breakdown)
+  // Restore slider and legend
   const sliderWrap = document.querySelector('.lv-slider-wrap');
-  if (sliderWrap) sliderWrap.style.display = 'none';
+  if (sliderWrap) { sliderWrap.style.display = ''; }
+  const slider = document.getElementById('lvSlider');
+  if (slider) {
+    slider.value = cap;
+    slider.max   = Math.max(20, Math.max(...demand.map(d => d.totalSE), ...demand.map(d => d.totalTA)) + 2);
+    // Patch oninput so it updates lvCap.se (shared for both se & ta tabs)
+    slider.oninput = function() {
+      lvCap.se = lvCap.ta = +this.value;
+      document.getElementById('lvCapVal').textContent = this.value;
+      renderLvView();
+    };
+  }
+  document.getElementById('lvCapVal').textContent = cap;
 
-  // Chart
-  document.getElementById('lvChartWrap').innerHTML = buildStackedRoleSVG(demand, role);
+  // Chart — two bars per month
+  document.getElementById('lvChartWrap').innerHTML = buildGroupedRoleSVG(demand, cap);
 
-  // Replace lv-legend with project colour legend
+  // Legend
   const lvLeg = document.querySelector('.lv-legend');
   if (lvLeg) {
-    // Collect all projects that have demand this period
-    const seenIds = new Set();
-    demand.forEach(d => d.byProject.forEach(bp => {
-      if ((role === 'se' ? bp.se : bp.ta) > 0) seenIds.add(bp.id);
-    }));
-    const activeProjs = projects.filter(p => seenIds.has(p.id));
-    lvLeg.innerHTML = activeProjs.map(p =>
-      `<span><span class="res-leg-dot" style="background:${projColor(p)}"></span>${p.name.length > 38 ? p.name.slice(0,36)+'…' : p.name}</span>`
-    ).join('');
+    lvLeg.innerHTML = `
+      <span><span class="res-leg-dot" style="background:#DC2626"></span>Regulatory (Reg)</span>
+      <span><span class="res-leg-dot" style="background:#7C3AED"></span>Non-Reg / GPS</span>
+      <span style="display:inline-flex;align-items:center;gap:3px"><span class="res-leg-dot" style="background:#0369A1"></span><strong style="font-size:9px;color:#0369A1">SE</strong> bar (left)</span>
+      <span style="display:inline-flex;align-items:center;gap:3px"><span class="res-leg-dot" style="background:#D97706"></span><strong style="font-size:9px;color:#D97706">TA</strong> bar (right)</span>
+      <span><span class="res-leg-dot" style="background:#F59E0B;height:3px;border-radius:0;vertical-align:middle"></span>Capacity line — drag slider ↑↓</span>`;
     lvLeg.style.display = '';
   }
 
-  // Month summary cards
-  const vals   = demand.map(d => role === 'se' ? d.totalSE : d.totalTA);
-  const maxVal = Math.max(...vals, 1);
-  const cards  = demand.map((d, i) => {
-    const val  = vals[i];
-    if (!val) return '';
-    const barPct = Math.round(val / maxVal * 100);
-    return `<div class="lv-card" style="background:#F8FAFC;border:1.5px solid #E2E8F0">
+  // Month cards — show SE and TA totals side by side
+  const cards = demand.map(d => {
+    if (!d.totalSE && !d.totalTA) return '';
+    const maxV = Math.max(d.totalSE, d.totalTA, 1);
+    const sePct = Math.round(d.totalSE / maxV * 100);
+    const taPct = Math.round(d.totalTA / maxV * 100);
+    const seOver = d.totalSE > cap, taOver = d.totalTA > cap;
+    const bg = (seOver || taOver) ? '#FEF2F2' : '#F8FAFC';
+    const border = (seOver || taOver) ? '#FECACA' : '#E2E8F0';
+    return `<div class="lv-card" style="background:${bg};border:1.5px solid ${border}">
       <div class="lv-card-month">${d.month}</div>
-      <div class="lv-card-demand" style="font-size:22px;color:${color}">${val % 1 === 0 ? val : val.toFixed(1)}</div>
-      <div class="lv-card-label">${label}s</div>
-      <div class="lv-card-minibar"><div class="lv-card-minibar-fill" style="width:${barPct}%;background:${color}"></div></div>
-      <div style="font-size:10px;color:#94A3B8;margin-top:4px">
-        <span style="color:#DC2626">Reg ${(role==='se'?d.regSE:d.regTA)%1===0?(role==='se'?d.regSE:d.regTA):(role==='se'?d.regSE:d.regTA).toFixed(1)}</span>
-        &nbsp;+&nbsp;
-        <span style="color:#7C3AED">NR ${(role==='se'?d.nonregSE:d.nonregTA)%1===0?(role==='se'?d.nonregSE:d.nonregTA):(role==='se'?d.nonregSE:d.nonregTA).toFixed(1)}</span>
+      <div style="display:flex;gap:8px;justify-content:center;margin:4px 0">
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:800;color:${seOver?'#DC2626':'#0369A1'}">${d.totalSE%1===0?d.totalSE:d.totalSE.toFixed(1)}</div>
+          <div style="font-size:9px;font-weight:700;color:#0369A1">SE</div>
+          <div style="font-size:9px;color:#94A3B8">R${d.regSE%1===0?d.regSE:d.regSE.toFixed(1)}+NR${d.nonregSE%1===0?d.nonregSE:d.nonregSE.toFixed(1)}</div>
+        </div>
+        <div style="width:1px;background:#E2E8F0"></div>
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:800;color:${taOver?'#DC2626':'#D97706'}">${d.totalTA%1===0?d.totalTA:d.totalTA.toFixed(1)}</div>
+          <div style="font-size:9px;font-weight:700;color:#D97706">TA</div>
+          <div style="font-size:9px;color:#94A3B8">R${d.regTA%1===0?d.regTA:d.regTA.toFixed(1)}+NR${d.nonregTA%1===0?d.nonregTA:d.nonregTA.toFixed(1)}</div>
+        </div>
       </div>
+      <div class="lv-card-minibar"><div class="lv-card-minibar-fill" style="width:${sePct}%;background:#0369A1"></div></div>
     </div>`;
   }).join('');
   document.getElementById('lvCards').innerHTML = cards;
 
   // Stats strip
-  const nonZero = vals.filter(v => v > 0);
-  const peak    = nonZero.length ? Math.max(...nonZero) : 0;
-  const avg     = nonZero.length ? +(nonZero.reduce((a,b)=>a+b,0)/nonZero.length).toFixed(1) : 0;
-  const regTotal    = demand.reduce((s,d)=>s+(role==='se'?d.regSE:d.regTA),0);
-  const nonregTotal = demand.reduce((s,d)=>s+(role==='se'?d.nonregSE:d.nonregTA),0);
+  const seVals = demand.map(d => d.totalSE).filter(v => v > 0);
+  const taVals = demand.map(d => d.totalTA).filter(v => v > 0);
+  const peakSE = seVals.length ? Math.max(...seVals) : 0;
+  const peakTA = taVals.length ? Math.max(...taVals) : 0;
+  const regSEtot    = demand.reduce((s,d)=>s+d.regSE,   0);
+  const nonregSEtot = demand.reduce((s,d)=>s+d.nonregSE,0);
+  const regTAtot    = demand.reduce((s,d)=>s+d.regTA,   0);
+  const nonregTAtot = demand.reduce((s,d)=>s+d.nonregTA,0);
+  const fmt = v => v % 1 === 0 ? v : v.toFixed(1);
 
   document.getElementById('lvStats').innerHTML = [
-    { v: peak % 1 === 0 ? peak : peak.toFixed(1), l:`Peak ${role.toUpperCase()} Demand`, c:'#F87171' },
-    { v: avg,                                       l:`Avg ${role.toUpperCase()}/month`,   c:'#93C5FD' },
-    { v: regTotal    % 1 === 0 ? regTotal    : regTotal.toFixed(1),    l:'Reg Total',     c:'#EF4444' },
-    { v: nonregTotal % 1 === 0 ? nonregTotal : nonregTotal.toFixed(1), l:'Non-Reg Total', c:'#A78BFA' },
-    { v: (regTotal+nonregTotal) % 1 === 0 ? (regTotal+nonregTotal) : (regTotal+nonregTotal).toFixed(1), l:'Combined Total', c:'#4ADE80' },
-  ].map(s=>`<div class="lv-stat"><div class="lv-stat-val" style="color:${s.c}">${s.v}</div><div class="lv-stat-lbl">${s.l}</div></div>`).join('');
+    { v:`${fmt(peakSE)} SE`,                              l:'Peak SE Demand',   c:'#93C5FD' },
+    { v:`${fmt(peakTA)} TA`,                              l:'Peak TA Demand',   c:'#FCD34D' },
+    { v:`${fmt(regSEtot)} SE · ${fmt(regTAtot)} TA`,     l:'Reg Total',        c:'#F87171' },
+    { v:`${fmt(nonregSEtot)} SE · ${fmt(nonregTAtot)} TA`,l:'Non-Reg Total',   c:'#A78BFA' },
+    { v:fmt(regSEtot+nonregSEtot+regTAtot+nonregTAtot),  l:'Combined Total',   c:'#4ADE80' },
+  ].map(s=>`<div class="lv-stat"><div class="lv-stat-val" style="color:${s.c};font-size:16px">${s.v}</div><div class="lv-stat-lbl">${s.l}</div></div>`).join('');
 }
 
 // ─── Phase drag — move bars on the Gantt to shift phase dates ─────────────────
@@ -2153,6 +2222,84 @@ document.addEventListener('mouseup', () => {
 document.addEventListener('keydown', e => {
   if (e.key==='Escape') { closeModal('mo'); closeModal('mop'); closeModal('moCloud'); }
   if ((e.metaKey||e.ctrlKey) && e.key==='k') { e.preventDefault(); openModal(); }
+});
+
+// ─── Timeline pan & zoom ───────────────────────────────────────────────────────
+let ganttZoom = 1;
+
+function ganttZoomIn() {
+  ganttZoom = Math.min(6, +(ganttZoom * 1.5).toFixed(3));
+  applyGanttZoom();
+}
+function ganttZoomOut() {
+  ganttZoom = Math.max(1, +(ganttZoom / 1.5).toFixed(3));
+  applyGanttZoom();
+}
+function ganttResetZoom() {
+  ganttZoom = 1;
+  const wrap = document.getElementById('ganttWrapper');
+  if (wrap) wrap.scrollLeft = 0;
+  applyGanttZoom();
+}
+function applyGanttZoom() {
+  const gantt = document.getElementById('gantt');
+  if (!gantt) return;
+  if (ganttZoom > 1) {
+    gantt.style.minWidth = Math.round(ganttZoom * 100) + '%';
+  } else {
+    gantt.style.minWidth = '';
+  }
+  const lbl = document.getElementById('ganttZoomLbl');
+  if (lbl) {
+    lbl.textContent = ganttZoom > 1
+      ? `${Math.round(ganttZoom * 100)}% zoom — drag to pan`
+      : 'May – Dec 2026 · drag timeline to pan';
+  }
+}
+
+// Drag-to-pan on the gantt wrapper
+let ganttPanState = null;
+(function setupGanttPan() {
+  const wrap = document.getElementById('ganttWrapper');
+  if (!wrap) return;
+
+  wrap.addEventListener('mousedown', e => {
+    // Don't start pan if clicking a phase bar, project bar, button, or edit control
+    if (e.target.closest('.g-pbar, .g-bar, button, .edit-hint, .expand-btn, select, input, a')) return;
+    // Don't pan when a phase drag is in progress
+    if (phaseDragState) return;
+    ganttPanState = { startX: e.clientX, scrollLeft: wrap.scrollLeft };
+    wrap.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+
+  // Ctrl + scroll to zoom, centred on cursor position
+  wrap.addEventListener('wheel', e => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const scrollW = wrap.scrollWidth;
+    const ratio   = scrollW > 0 ? (wrap.scrollLeft + (e.clientX - wrap.getBoundingClientRect().left)) / scrollW : 0.5;
+    if (e.deltaY < 0) ganttZoomIn();
+    else               ganttZoomOut();
+    requestAnimationFrame(() => {
+      const newW = wrap.scrollWidth;
+      wrap.scrollLeft = ratio * newW - (e.clientX - wrap.getBoundingClientRect().left);
+    });
+  }, { passive: false });
+})();
+
+document.addEventListener('mousemove', e => {
+  if (!ganttPanState) return;
+  const wrap = document.getElementById('ganttWrapper');
+  if (!wrap) return;
+  wrap.scrollLeft = ganttPanState.scrollLeft - (e.clientX - ganttPanState.startX);
+});
+
+document.addEventListener('mouseup', () => {
+  if (!ganttPanState) return;
+  ganttPanState = null;
+  const wrap = document.getElementById('ganttWrapper');
+  if (wrap) wrap.style.cursor = 'grab';
 });
 
 initCloud();
