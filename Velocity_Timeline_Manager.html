@@ -100,6 +100,13 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
 .g-pbar-lbl{font-size:8px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .g-pbar-tbd{background:transparent!important;border-style:dashed;border-width:1.5px;top:8px;height:15px}
 
+/* Requirements ready badge */
+.req-badge{width:20px;height:20px;border-radius:50%;border:none;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0;transition:all .15s;line-height:1}
+.req-yes{background:#DCFCE7;color:#16A34A;box-shadow:0 0 0 1.5px #16A34A}
+.req-yes:hover{background:#BBF7D0}
+.req-no{background:#F1F5F9;color:#CBD5E1;box-shadow:0 0 0 1.5px #E2E8F0}
+.req-no:hover{background:#FEF3C7;color:#D97706;box-shadow:0 0 0 1.5px #FCD34D}
+
 /* Add phase row */
 .g-add-phase-row{display:flex;border-bottom:1px solid #E2E8F0;background:#F8FFF9}
 .g-add-phase-btn{width:320px;min-width:320px;padding:5px 10px 5px 36px;border-right:1px solid #E2E8F0;border:none;background:none;font-size:11px;color:#0D9488;cursor:pointer;text-align:left;font-weight:600;display:flex;align-items:center;gap:4px}
@@ -500,6 +507,14 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
         </div>
       </div>
       <div class="fg">
+        <label class="fl">Requirements</label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 12px;border:1px solid #CBD5E1;border-radius:6px;transition:border .15s" id="moReqLabel">
+          <input type="checkbox" id="moReqReady" style="width:16px;height:16px;accent-color:#0D9488;cursor:pointer" onchange="document.getElementById('moReqLabel').style.borderColor=this.checked?'#0D9488':'#CBD5E1'">
+          <span style="font-size:13px;color:#374151">Requirements are available and defined</span>
+          <span id="moReqStatus" style="margin-left:auto;font-size:11px;font-weight:700"></span>
+        </label>
+      </div>
+      <div class="fg">
         <label class="fl">Key milestone</label>
         <input class="fi" type="text" id="moMilestone" placeholder="e.g. SIT complete 30 Jun">
       </div>
@@ -871,6 +886,11 @@ function ganttRow(p) {
       ${phaseCnt}
       <div class="sdot sd-${p.status}"></div>
       <span class="sbadge sb-${p.stream}">${SLBL[p.stream]}</span>
+      <button class="req-badge ${p.requirementsReady ? 'req-yes' : 'req-no'}"
+        onclick="toggleReqReady(event,${p.id})"
+        title="${p.requirementsReady ? '✓ Requirements ready — click to toggle' : 'Requirements not available — click when ready'}">
+        ${p.requirementsReady ? '✓' : '–'}
+      </button>
       <span class="pname ${!p.startDate&&!p.endDate?'pname-tbd':''}" title="${p.name}">${p.name}</span>
       ${p.resources ? `<span class="res-pill">${p.resources} FTE</span>` : ''}
       <span class="edit-hint" onclick="openModal(${p.id})">✎</span>
@@ -995,6 +1015,22 @@ function render() {
   gantt.innerHTML = head + body;
 }
 
+// ─── Requirements ready toggle ────────────────────────────────────────────────
+function toggleReqReady(e, projId) {
+  e.stopPropagation();
+  const p = projects.find(x => x.id === projId);
+  if (!p) return;
+  p.requirementsReady = !p.requirementsReady;
+  persist();
+  // Update badge in-place (no full re-render needed)
+  const btn = e.currentTarget;
+  btn.className = `req-badge ${p.requirementsReady ? 'req-yes' : 'req-no'}`;
+  btn.textContent = p.requirementsReady ? '✓' : '–';
+  btn.title = p.requirementsReady
+    ? '✓ Requirements ready — click to toggle'
+    : 'Requirements not available — click when ready';
+}
+
 // ─── Expand/collapse ─────────────────────────────────────────────────────────
 function toggleExpand(e, id) {
   e.stopPropagation();
@@ -1101,6 +1137,11 @@ function openModal(id) {
     document.getElementById('moSquad').value         = p.squad     || '';
     document.getElementById('moMilestone').value     = p.milestone || '';
     document.getElementById('moNotes').value         = p.notes     || '';
+    const reqCb = document.getElementById('moReqReady');
+    reqCb.checked = !!p.requirementsReady;
+    document.getElementById('moReqLabel').style.borderColor = p.requirementsReady ? '#0D9488' : '#CBD5E1';
+    document.getElementById('moReqStatus').textContent = p.requirementsReady ? '✓ Ready' : '';
+    document.getElementById('moReqStatus').style.color = '#16A34A';
     del.style.display = 'inline-flex';
     renderPhaseChips(id);
   } else {
@@ -1109,6 +1150,9 @@ function openModal(id) {
     document.getElementById('moStream').value  = 'reg';
     document.getElementById('moStatus').value  = 'active';
     document.getElementById('moSquad').value   = '';
+    document.getElementById('moReqReady').checked = false;
+    document.getElementById('moReqLabel').style.borderColor = '#CBD5E1';
+    document.getElementById('moReqStatus').textContent = '';
     del.style.display = 'none';
     document.getElementById('phaseChipList').innerHTML = '';
   }
@@ -1130,8 +1174,9 @@ function saveProj() {
     endDate:   document.getElementById('moEnd').value,
     resources: parseInt(document.getElementById('moRes').value)||0,
     squad:     document.getElementById('moSquad').value,
-    milestone: document.getElementById('moMilestone').value.trim(),
-    notes:     document.getElementById('moNotes').value.trim(),
+    milestone:        document.getElementById('moMilestone').value.trim(),
+    notes:            document.getElementById('moNotes').value.trim(),
+    requirementsReady: document.getElementById('moReqReady').checked,
   };
   if (id) {
     const idx = projects.findIndex(p=>p.id===+id);
