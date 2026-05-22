@@ -1307,15 +1307,27 @@ function selectResMonth(idx) {
   renderResView();
 }
 
-/** Return projects that overlap with month mIdx (0=May…7=Dec) and have resources */
+/** Return projects that overlap with month mIdx (0=May…7=Dec) and have resources.
+ *  When a project has phases with dates, phase overlap drives the check so that
+ *  dragging a phase bar immediately updates Combined / Reg / Non-Reg levelling.
+ *  Falls back to project-level start/end for projects without dated phases. */
 function getMonthProjects(mIdx) {
   const year = 2026, month = 4 + mIdx;            // Jan=0, May=4
   const ms = new Date(year, month, 1);
   const me = new Date(year, month + 1, 0);         // last day of month
-  return projects.filter(p =>
-    p.startDate && p.endDate && (p.resources || 0) > 0 &&
-    new Date(p.startDate) <= me && new Date(p.endDate) >= ms
-  );
+  return projects.filter(p => {
+    if ((p.resources || 0) === 0) return false;
+    // Prefer phase-level overlap so phase drags update levelling in real time
+    const datedPhases = (p.phases || []).filter(ph => ph.startDate && ph.endDate);
+    if (datedPhases.length > 0) {
+      return datedPhases.some(ph =>
+        new Date(ph.startDate) <= me && new Date(ph.endDate) >= ms
+      );
+    }
+    // Fall back to project-level dates for projects with no phases yet
+    return p.startDate && p.endDate &&
+      new Date(p.startDate) <= me && new Date(p.endDate) >= ms;
+  });
 }
 
 /** Build the SVG bar chart.
