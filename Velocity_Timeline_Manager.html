@@ -1286,7 +1286,7 @@ function toggleSquadModel() {
   if (squadModelVisible) {
     // Compute demands to populate the squad model tables
     const demands = resSub === 'role'
-      ? GCOLS.map((_, i) => ({ reg: XLS_DATA.se[i], nonreg: XLS_DATA.ta[i], total: XLS_DATA.total[i] }))
+      ? computePhaseDemand().map(d => ({ reg: d.totalSE, nonreg: d.totalTA, total: d.totalSE + d.totalTA }))
       : GCOLS.map((_, i) => { const ps=getMonthProjects(i); const reg=ps.filter(p=>p.squad==='reg-squad').reduce((s,p)=>s+(p.resources||0),0); const nonreg=ps.filter(p=>p.squad!=='reg-squad').reduce((s,p)=>s+(p.resources||0),0); return {reg,nonreg,total:reg+nonreg,projects:ps}; });
     renderSquadModel(demands);
   }
@@ -1421,11 +1421,13 @@ function renderResView() {
   // ── Build demands array based on active sub-tab ───────────────────────────
   let demands;
   if (resSub === 'role') {
-    // Default: XLS data — SE vs TA headcount per month
-    demands = GCOLS.map((_, i) => ({
-      se:    XLS_DATA.se[i],
-      ta:    XLS_DATA.ta[i],
-      total: XLS_DATA.total[i],
+    // Computed live from phase seFte / taFte — updates when phases are edited or dragged
+    const pd = computePhaseDemand();
+    demands = pd.map(d => ({
+      se:        d.totalSE,
+      ta:        d.totalTA,
+      total:     d.totalSE + d.totalTA,
+      byProject: d.byProject,   // for drill-down
     }));
   } else {
     // Reg vs Non-Reg: derived live from projects
@@ -1446,7 +1448,7 @@ function renderResView() {
     legEl.innerHTML = `
       <span><span class="res-leg-dot" style="background:#0369A1"></span>Software Engineers (SE)</span>
       <span><span class="res-leg-dot" style="background:#D97706"></span>Test Analysts (TA)</span>
-      <span style="color:#94A3B8;font-size:10px">Source: AAR_Monthly_Resource_Formulas.xlsx · click a bar to see who's allocated</span>`;
+      <span style="color:#94A3B8;font-size:10px">Computed live from phase SE / TA FTEs · click a bar to see the breakdown</span>`;
   } else {
     legEl.innerHTML = `
       <span><span class="res-leg-dot" style="background:#DC2626"></span>Regulatory Squad</span>
@@ -1463,34 +1465,39 @@ function renderResView() {
     dd.className = 'res-drill';
 
     if (resSub === 'role') {
-      // Show named resources from XLS heatmap
-      const activeEng  = XLS_DATA.engineers.filter(e => e.months[selMonth] === 1);
-      const activeTa   = XLS_DATA.testers.filter(t => t.months[selMonth] === 1);
-      const chip = (name, bg) =>
-        `<span style="display:inline-block;padding:3px 9px;border-radius:4px;background:${bg};color:#fff;font-size:11px;font-weight:500;margin:2px">${name}</span>`;
-      const engChips = activeEng.length
-        ? activeEng.map(e => chip(e.name, '#0369A1')).join('')
-        : `<span style="color:#94A3B8;font-size:11px">None allocated</span>`;
-      const taChips = activeTa.length
-        ? activeTa.map(t => chip(t.name, '#D97706')).join('')
-        : `<span style="color:#94A3B8;font-size:11px">None allocated</span>`;
-
+      // Show live per-project SE / TA breakdown from phase FTEs
+      const activeProjs = (d.byProject || []).filter(p => p.se > 0 || p.ta > 0)
+        .sort((a, b) => (b.se + b.ta) - (a.se + a.ta));
+      const fmt = v => v % 1 === 0 ? v : v.toFixed(1);
+      const rows = activeProjs.map(p => {
+        const sqBadge = p.squad === 'reg-squad'
+          ? `<span class="sbadge sb-reg" style="font-size:9px">Reg</span>`
+          : `<span class="sbadge sb-gps" style="font-size:9px">Non-Reg</span>`;
+        return `<tr>
+          <td><span class="sbadge sb-${p.stream}">${SLBL[p.stream]}</span></td>
+          <td style="font-weight:500">${p.name}</td>
+          <td>${sqBadge}</td>
+          <td style="text-align:center;font-weight:700;color:#0369A1">${p.se > 0 ? fmt(p.se) : '—'}</td>
+          <td style="text-align:center;font-weight:700;color:#D97706">${p.ta > 0 ? fmt(p.ta) : '—'}</td>
+          <td style="text-align:center;font-weight:800;color:#0F2544">${fmt(p.se + p.ta)}</td>
+        </tr>`;
+      }).join('');
+      const emptyMsg = activeProjs.length === 0
+        ? `<div style="color:#94A3B8;font-size:12px;padding:8px 0">No phase SE / TA FTEs allocated this month.</div>`
+        : '';
       dd.innerHTML = `
         <div class="res-drill-title">
           📅 <strong>${mLabel} 2026</strong>
-          <span style="background:#0369A1;color:#fff;padding:2px 9px;border-radius:4px;font-size:11px">${d.se} SE</span>
-          <span style="background:#D97706;color:#fff;padding:2px 9px;border-radius:4px;font-size:11px">${d.ta} TA</span>
-          <span style="font-weight:800;color:#0F2544">${d.total} people total</span>
+          <span style="background:#0369A1;color:#fff;padding:2px 9px;border-radius:4px;font-size:11px">${fmt(d.se)} SE</span>
+          <span style="background:#D97706;color:#fff;padding:2px 9px;border-radius:4px;font-size:11px">${fmt(d.ta)} TA</span>
+          <span style="font-weight:800;color:#0F2544">${fmt(d.total)} FTE total</span>
           <button onclick="selMonth=null;renderResView()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94A3B8;font-size:20px;line-height:1;padding:0 4px" title="Close">×</button>
         </div>
-        <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:700;color:#0369A1;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Software Engineers (${d.se})</div>
-          <div>${engChips}</div>
-        </div>
-        <div>
-          <div style="font-size:10px;font-weight:700;color:#D97706;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Test Analysts (${d.ta})</div>
-          <div>${taChips}</div>
-        </div>`;
+        ${emptyMsg}
+        ${activeProjs.length ? `<table class="dtable">
+          <thead><tr><th>Stream</th><th>Project</th><th>Squad</th><th style="text-align:center;color:#0369A1">SE FTE</th><th style="text-align:center;color:#D97706">TA FTE</th><th style="text-align:center">Total</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>` : ''}`;
 
     } else {
       // Show projects driving the demand
