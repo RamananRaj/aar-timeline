@@ -120,6 +120,7 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
 .sbadge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;flex-shrink:0}
 .sb-reg{background:#FEE2E2;color:#991B1B}.sb-nonreg{background:#EDE9FE;color:#5B21B6}
 .sb-gps{background:#DBEAFE;color:#1E40AF}.sb-bau{background:#E0F2FE;color:#075985}
+.sb-standalone{background:#FFEDD5;color:#9A3412}
 .sdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .sd-active{background:#0D9488}.sd-planning{background:#F59E0B}.sd-tbd{background:#94A3B8}.sd-completed{background:#16A34A}
 
@@ -273,6 +274,7 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
   <select id="fStream" onchange="render()">
     <option value="">All</option>
     <option value="reg">Regulatory</option>
+    <option value="standalone">Standalone</option>
     <option value="nonreg">Non-Reg</option>
     <option value="gps">GPS</option>
     <option value="bau">BAU</option>
@@ -296,6 +298,7 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
   <div class="controls-right">
     <div class="legend">
       <div class="leg"><div class="leg-sw" style="background:#DC2626"></div>Regulatory</div>
+      <div class="leg"><div class="leg-sw" style="background:#EA580C"></div>Standalone</div>
       <div class="leg"><div class="leg-sw" style="background:#7C3AED"></div>Non-Reg</div>
       <div class="leg"><div class="leg-sw" style="background:#1D4ED8"></div>GPS</div>
       <div class="leg"><div class="leg-sw" style="background:#0369A1"></div>BAU</div>
@@ -466,6 +469,7 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
           <label class="fl">Stream <span class="req">*</span></label>
           <select class="fi" id="moStream">
             <option value="reg">Regulatory</option>
+            <option value="standalone">Standalone</option>
             <option value="nonreg">Non-Regulatory</option>
             <option value="gps">GPS</option>
             <option value="bau">BAU</option>
@@ -634,8 +638,8 @@ const GSTART = new Date('2026-05-01');
 const GEND   = new Date('2026-12-31');
 const GTOTAL = (GEND - GSTART) / 86400000 + 1;
 const TODAY  = '2026-05-21';
-const SCOL = { reg:'#DC2626', nonreg:'#7C3AED', gps:'#1D4ED8', bau:'#0369A1' };
-const SLBL = { reg:'Regulatory', nonreg:'Non-Reg', gps:'GPS', bau:'BAU' };
+const SCOL = { reg:'#DC2626', nonreg:'#7C3AED', gps:'#1D4ED8', bau:'#0369A1', standalone:'#EA580C' };
+const SLBL = { reg:'Regulatory', nonreg:'Non-Reg', gps:'GPS', bau:'BAU', standalone:'Standalone' };
 const STLBL = { active:'Active', planning:'Planning', tbd:'TBD', completed:'Completed' };
 
 // ─── Default data ─────────────────────────────────────────────────────────────
@@ -680,7 +684,7 @@ const DEFAULTS = [
     {id:603,type:'golive',name:'Go-Live',color:'#16A34A', startDate:'2026-06-23', endDate:'2026-06-30', seFte:0.5, taFte:0.5, notes:''},
   ]},
   {id:7,  name:'GAS B2B',                             stream:'reg',    status:'tbd',      startDate:'',           endDate:'',           resources:0, squad:'reg-squad',    milestone:'Dates TBC',            notes:'Scope and dates being confirmed.', phases:[]},
-  {id:8,  name:'ICON Water — Class A Metering',       stream:'reg',    status:'active',   startDate:'2026-05-01', endDate:'2026-10-31', resources:1, squad:'reg-squad',    milestone:'Milestone Jul 2026',   notes:'Long-running dedicated project.',
+  {id:8,  name:'ICON Water — Class A Metering',       stream:'standalone', status:'active', startDate:'2026-05-01', endDate:'2026-10-31', resources:1, squad:'reg-squad',    milestone:'Milestone Jul 2026',   notes:'Long-running dedicated project.',
    phases:[
     {id:801,type:'sd',    name:'SD',     color:'#7C3AED', startDate:'2026-05-01', endDate:'2026-05-31', seFte:1,   taFte:0,   notes:''},
     {id:802,type:'dev',   name:'DEV',    color:'#1D4ED8', startDate:'2026-06-01', endDate:'2026-08-31', seFte:1,   taFte:0,   notes:''},
@@ -739,6 +743,7 @@ let projects  = JSON.parse(localStorage.getItem('aar_projs') || 'null') || DEFAU
 function migrateProjects() {
   projects.forEach(p => {
     const defProj = DEFAULTS.find(d => d.id === p.id);
+    // Migrate seFte/taFte on phases that predate those fields
     (p.phases || []).forEach(ph => {
       if (ph.seFte == null || ph.taFte == null) {
         const defPh = defProj ? (defProj.phases || []).find(d => d.id === ph.id) : null;
@@ -746,6 +751,8 @@ function migrateProjects() {
         if (ph.taFte == null) ph.taFte = defPh ? (defPh.taFte || 0) : 0;
       }
     });
+    // Migrate ICON Water (id 8) to standalone stream
+    if (p.id === 8 && p.stream === 'reg') p.stream = 'standalone';
   });
 }
 migrateProjects();
@@ -991,7 +998,7 @@ function render() {
 
   let body = '';
   if (viewMode === 'stream') {
-    [['reg','Regulatory'],['bau','BAU / Technical'],['nonreg','Non-Regulatory'],['gps','GPS Projects']].forEach(([s,lbl]) => {
+    [['reg','Regulatory'],['standalone','Standalone Projects'],['bau','BAU / Technical'],['nonreg','Non-Regulatory'],['gps','GPS Projects']].forEach(([s,lbl]) => {
       const grp = list.filter(p=>p.stream===s);
       if (!grp.length) return;
       body += sectionRow(lbl, grp.length, SCOL[s]);
@@ -2012,10 +2019,11 @@ function computePhaseDemand() {
 
 // ─── Stream-based color palettes for stacked bars ────────────────────────────
 const STREAM_PALETTES = {
-  reg:    ['#EF4444','#F97316','#F59E0B','#DC2626','#C2410C','#D97706','#B91C1C','#EA580C'],
-  nonreg: ['#A855F7','#9333EA','#7C3AED','#6D28D9'],
-  gps:    ['#3B82F6','#2563EB','#1D4ED8','#0284C7','#0891B2','#0369A1'],
-  bau:    ['#06B6D4','#0891B2'],
+  reg:        ['#EF4444','#F97316','#F59E0B','#DC2626','#C2410C','#D97706','#B91C1C','#EA580C'],
+  standalone: ['#EA580C','#C2410C','#F97316'],
+  nonreg:     ['#A855F7','#9333EA','#7C3AED','#6D28D9'],
+  gps:        ['#3B82F6','#2563EB','#1D4ED8','#0284C7','#0891B2','#0369A1'],
+  bau:        ['#06B6D4','#0891B2'],
 };
 const _streamIdx = {};
 const _projColorCache = {};
