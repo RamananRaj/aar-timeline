@@ -225,6 +225,27 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
 .lv-stat-val{font-size:20px;font-weight:700;color:#fff;line-height:1}
 .lv-stat-lbl{font-size:9px;color:#64748B;text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
 
+/* ── T-Shirt Sizing Dashboard ────────────────────────── */
+.sz-config{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:16px;margin-bottom:16px}
+.sz-config-grid{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.sz-config-col{display:flex;flex-direction:column;gap:4px;min-width:90px}
+.sz-config-lbl{font-size:10px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.4px}
+.sz-input{width:54px;padding:5px 7px;border:1px solid #CBD5E1;border-radius:5px;font-size:12px;color:#1E293B;text-align:center;background:#fff}
+.sz-input:focus{outline:none;border-color:#0D9488}
+.sz-card{background:#fff;border-radius:8px;border:1px solid #E2E8F0;padding:14px 16px;margin-bottom:8px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;transition:box-shadow .15s}
+.sz-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.07)}
+.sz-letter-btn{padding:6px 13px;border-radius:6px;font-size:13px;font-weight:800;cursor:pointer;border:2px solid #E2E8F0;background:#fff;color:#64748B;transition:all .15s;letter-spacing:.5px}
+.sz-letter-btn:hover{border-color:#94A3B8;color:#0F2544}
+.sz-letter-btn.sz-active{color:#fff}
+.sz-sub{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #E2E8F0;background:#F8FAFC;color:#374151;transition:all .15s;white-space:nowrap}
+.sz-sub:hover{background:#F1F5F9;border-color:#94A3B8}
+.sz-sub.sz-sub-active{color:#fff}
+.sz-badge-inline{font-size:9px;font-weight:800;padding:2px 6px;border-radius:3px;color:#fff;flex-shrink:0}
+.tsz-gantt{min-width:26px;height:20px;border-radius:4px;border:none;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;cursor:pointer;flex-shrink:0;transition:all .15s;padding:0 5px;letter-spacing:.3px}
+.tsz-gantt.tsz-set{color:#fff}
+.tsz-gantt.tsz-unset{background:#F1F5F9;color:#CBD5E1;box-shadow:0 0 0 1.5px #E2E8F0}
+.tsz-gantt.tsz-unset:hover{background:#FEF3C7;color:#D97706;box-shadow:0 0 0 1.5px #FCD34D}
+
 /* ── Timeline pan & zoom ──────────────────────────────── */
 /* Zoom control bar */
 .gantt-zoom-bar{display:flex;align-items:center;gap:6px;padding:0 0 10px;flex-wrap:wrap}
@@ -259,6 +280,7 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
       <button class="vtab" onclick="setView('status',this)">By Status</button>
       <button class="vtab" onclick="setView('resources',this)">📊 Resources</button>
       <button class="vtab" onclick="setView('levelling',this)">⚖ Levelling</button>
+      <button class="vtab" onclick="setView('sizing',this)">👕 Sizing</button>
     </div>
     <button class="btn btn-ghost" id="shareBtn" onclick="copyShareUrl(false)" title="Copy shareable link">🔗 Share</button>
     <button class="btn btn-ghost" onclick="openCloudModal()" title="Set up cloud sync so your team can collaborate">☁ Cloud Sync</button>
@@ -395,6 +417,9 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
   <div class="lv-cards" id="lvCards"></div>
 
 </div>
+
+<!-- ── T-Shirt Sizing View ── -->
+<div id="sizingView" style="display:none;padding:16px 24px 40px"></div>
 
 <!-- ── Cloud Sync Modal ── -->
 <div class="mo" id="moCloud" onclick="bgClose(event,'moCloud')">
@@ -898,6 +923,12 @@ function ganttRow(p) {
         title="${p.requirementsReady ? '✓ Requirements ready — click to toggle' : 'Requirements not available — click when ready'}">
         ${p.requirementsReady ? '✓' : '–'}
       </button>
+      <button class="tsz-gantt ${p.tshirtSize ? 'tsz-set' : 'tsz-unset'}"
+        style="${p.tshirtSize ? `background:${TSZ_COLORS[p.tshirtSize[0]]}` : ''}"
+        onclick="openSizingForProject(event,${p.id})"
+        title="${p.tshirtSize ? `T-Shirt: ${p.tshirtSize} — click to resize` : 'No size assigned — click to size this project'}">
+        ${p.tshirtSize || '?'}
+      </button>
       <span class="pname ${!p.startDate&&!p.endDate?'pname-tbd':''}" title="${p.name}">${p.name}</span>
       ${p.resources ? `<span class="res-pill">${p.resources} FTE</span>` : ''}
       <span class="edit-hint" onclick="openModal(${p.id})">✎</span>
@@ -958,23 +989,25 @@ function setView(v, el) {
   viewMode = v;
   document.querySelectorAll('.vtab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  const ganttMain = document.getElementById('ganttMain');
-  const resMain   = document.getElementById('resView');
-  const lvMain    = document.getElementById('lvView');
+  const ganttMain  = document.getElementById('ganttMain');
+  const resMain    = document.getElementById('resView');
+  const lvMain     = document.getElementById('lvView');
+  const sizingMain = document.getElementById('sizingView');
   if (v === 'resources') {
-    ganttMain.style.display = 'none';
-    resMain.style.display   = 'block';
-    lvMain.style.display    = 'none';
+    ganttMain.style.display  = 'none'; resMain.style.display   = 'block';
+    lvMain.style.display     = 'none'; sizingMain.style.display = 'none';
     renderResView();
   } else if (v === 'levelling') {
-    ganttMain.style.display = 'none';
-    resMain.style.display   = 'none';
-    lvMain.style.display    = 'block';
+    ganttMain.style.display  = 'none'; resMain.style.display   = 'none';
+    lvMain.style.display     = 'block'; sizingMain.style.display = 'none';
     renderLvView();
+  } else if (v === 'sizing') {
+    ganttMain.style.display  = 'none'; resMain.style.display   = 'none';
+    lvMain.style.display     = 'none'; sizingMain.style.display = 'block';
+    renderSizingView();
   } else {
-    ganttMain.style.display = '';
-    resMain.style.display   = 'none';
-    lvMain.style.display    = 'none';
+    ganttMain.style.display  = ''; resMain.style.display    = 'none';
+    lvMain.style.display     = 'none'; sizingMain.style.display = 'none';
     render();
   }
 }
@@ -1020,6 +1053,24 @@ function render() {
     });
   }
   gantt.innerHTML = head + body;
+}
+
+// ─── T-shirt badge click — switch to Sizing tab and highlight that project ────
+function openSizingForProject(e, projId) {
+  e.stopPropagation();
+  // Switch to Sizing view
+  const tab = [...document.querySelectorAll('.vtab')].find(t => t.textContent.includes('Sizing'));
+  if (tab) setView('sizing', tab);
+  // Scroll the project card into view after render
+  requestAnimationFrame(() => {
+    const cards = document.querySelectorAll('#sizingView .sz-card');
+    const idx   = projects.findIndex(p => p.id === projId);
+    if (cards[idx]) {
+      cards[idx].scrollIntoView({ behavior:'smooth', block:'center' });
+      cards[idx].style.boxShadow = `0 0 0 2.5px ${TSZ_COLORS[projects[idx]?.tshirtSize?.[0]] || '#F59E0B'}`;
+      setTimeout(() => { if (cards[idx]) cards[idx].style.boxShadow = ''; }, 1800);
+    }
+  });
 }
 
 // ─── Requirements ready toggle ────────────────────────────────────────────────
@@ -1482,12 +1533,12 @@ function renderResView() {
       byProject: d.byProject,   // for drill-down
     }));
   } else {
-    // Reg vs Non-Reg: derived live from projects
-    demands = GCOLS.map((_, i) => {
-      const ps     = getMonthProjects(i);
-      const reg    = ps.filter(p => p.squad === 'reg-squad').reduce((s, p) => s + (p.resources || 0), 0);
-      const nonreg = ps.filter(p => p.squad !== 'reg-squad').reduce((s, p) => s + (p.resources || 0), 0);
-      return { reg, nonreg, total: reg + nonreg, projects: ps };
+    // Reg vs Non-Reg: use phase-level FTEs so concurrent phase overlaps are counted correctly
+    const pd2 = computePhaseDemand();
+    demands = pd2.map((d, i) => {
+      const reg    = +( d.regSE    + d.regTA    ).toFixed(1);
+      const nonreg = +( d.nonregSE + d.nonregTA ).toFixed(1);
+      return { reg, nonreg, total: +(reg + nonreg).toFixed(1), projects: getMonthProjects(i) };
     });
   }
 
@@ -1673,21 +1724,15 @@ function setLvSub(sub, el) {
 }
 
 function getLvDemands() {
-  // Combined = Reg resources + Non-Reg resources (dynamic, from projects)
-  if (lvSub === 'combined') {
-    return GCOLS.map((_, i) => {
-      const ps = getMonthProjects(i);
-      return ps.reduce((s, p) => s + (p.resources || 0), 0);
-    });
-  }
-  if (lvSub === 'se' || lvSub === 'ta') {
-    return computePhaseDemand().map(d => lvSub === 'se' ? d.totalSE : d.totalTA);
-  }
-  const isReg = lvSub === 'reg';
-  return GCOLS.map((_, i) => {
-    const ps = getMonthProjects(i).filter(p => isReg ? p.squad === 'reg-squad' : p.squad !== 'reg-squad');
-    return ps.reduce((s, p) => s + (p.resources || 0), 0);
-  });
+  // All views now use computePhaseDemand() so that concurrent phase overlaps
+  // within and across projects are correctly summed per month.
+  const pd = computePhaseDemand();
+  if (lvSub === 'combined') return pd.map(d => +( d.totalSE   + d.totalTA   ).toFixed(1));
+  if (lvSub === 'se')       return pd.map(d => d.totalSE);
+  if (lvSub === 'ta')       return pd.map(d => d.totalTA);
+  if (lvSub === 'reg')      return pd.map(d => +( d.regSE     + d.regTA     ).toFixed(1));
+  if (lvSub === 'nonreg')   return pd.map(d => +( d.nonregSE  + d.nonregTA  ).toFixed(1));
+  return pd.map(d => +( d.totalSE + d.totalTA ).toFixed(1));
 }
 
 function buildLvChart(demands, cap) {
@@ -2301,6 +2346,189 @@ document.addEventListener('keydown', e => {
   if (e.key==='Escape') { closeModal('mo'); closeModal('mop'); closeModal('moCloud'); }
   if ((e.metaKey||e.ctrlKey) && e.key==='k') { e.preventDefault(); openModal(); }
 });
+
+// ─── T-Shirt Sizing ───────────────────────────────────────────────────────────
+const TSZ_COLORS  = { S:'#16A34A', M:'#0369A1', L:'#7C3AED', C:'#DC2626' };
+const TSZ_LABELS  = { S:'Small', M:'Medium', L:'Large', C:'Complex' };
+
+// Phase type weights — how SE and TA are distributed across phase types
+const PHASE_SE_W  = { sd:1.0, dev:1.0, sit:0.4, uat:0.2, golive:0.4, planning:1.0, review:0.3, custom:0.7 };
+const PHASE_TA_W  = { sd:0.0, dev:0.1, sit:0.8, uat:0.9, golive:0.3, planning:0.0, review:0.5, custom:0.5 };
+
+let sizingConfig = JSON.parse(localStorage.getItem('aar_sizing') || 'null') || {
+  increment: 25,   // % added per sub-level: X1 = base×1.25, X2 = base×1.50, X3 = base×1.75
+  bases: {
+    S: { se: 1,   ta: 0.5 },
+    M: { se: 2,   ta: 1   },
+    L: { se: 4,   ta: 2   },
+    C: { se: 6,   ta: 3   },
+  }
+};
+function saveSizingConfig() { localStorage.setItem('aar_sizing', JSON.stringify(sizingConfig)); }
+
+/** Return { se, ta } FTEs for a size code like 'M2'.
+ *  Formula: base × (1 + level × increment/100)
+ *  So M2 with 25% increment = 2 × 1.50 = 3.0 SE, 1 × 1.50 = 1.5 TA  */
+function getSizeFTE(sizeCode) {
+  if (!sizeCode) return { se: 0, ta: 0 };
+  const letter = sizeCode[0];
+  const level  = parseInt(sizeCode[1]);
+  const base   = sizingConfig.bases[letter];
+  const mult   = 1 + level * sizingConfig.increment / 100;
+  return {
+    se: +( base.se * mult ).toFixed(1),
+    ta: +( base.ta * mult ).toFixed(1),
+  };
+}
+
+/** Apply a T-shirt size to a project: update tshirtSize, distribute FTEs across phases. */
+function applySizingToProject(projId, sizeCode) {
+  const p = projects.find(x => x.id === projId);
+  if (!p) return;
+
+  p.tshirtSize = sizeCode || null;
+
+  if (sizeCode) {
+    const { se: totalSE, ta: totalTA } = getSizeFTE(sizeCode);
+
+    // Update project-level resource count
+    p.resources = Math.round(totalSE + totalTA);
+
+    // Distribute FTEs across phases weighted by phase type
+    const phases = (p.phases || []).filter(ph => ph.startDate && ph.endDate);
+    if (phases.length > 0) {
+      const seW   = phases.map(ph => PHASE_SE_W[ph.type] ?? 0.7);
+      const taW   = phases.map(ph => PHASE_TA_W[ph.type] ?? 0.5);
+      const seSum = seW.reduce((a, b) => a + b, 0);
+      const taSum = taW.reduce((a, b) => a + b, 0);
+      phases.forEach((ph, i) => {
+        ph.seFte = seSum > 0 ? +((seW[i] / seSum) * totalSE).toFixed(1) : 0;
+        ph.taFte = taSum > 0 ? +((taW[i] / taSum) * totalTA).toFixed(1) : 0;
+      });
+    }
+  }
+
+  persist();
+  render();
+  if (document.getElementById('sizingView').style.display !== 'none') renderSizingView();
+  if (document.getElementById('lvView').style.display     !== 'none') renderLvView();
+  if (document.getElementById('resView').style.display    !== 'none') renderResView();
+}
+
+function renderSizingView() {
+  const sizes = ['S','M','L','C'];
+  const fmt   = v => v % 1 === 0 ? v : v.toFixed(1);
+
+  // Config panel
+  let html = `<div class="sz-config">
+    <div style="font-size:13px;font-weight:700;color:#0F2544;margin-bottom:12px">
+      ⚙ Sizing Configuration
+      <span style="font-size:10px;font-weight:400;color:#94A3B8;margin-left:8px">Set base FTEs for each size and the % increment per sub-level</span>
+    </div>
+    <div class="sz-config-grid">
+      <div class="sz-config-col" style="min-width:110px">
+        <div class="sz-config-lbl">Increment per sub-level</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input class="sz-input" type="number" min="5" max="100" step="5" value="${sizingConfig.increment}"
+            oninput="sizingConfig.increment=+this.value;saveSizingConfig();renderSizingView()" style="width:60px">
+          <span style="font-size:12px;color:#64748B">%</span>
+        </div>
+        <div style="font-size:9px;color:#94A3B8;margin-top:3px">Default 25% → X2 = +50%, X3 = +75%</div>
+      </div>
+      ${sizes.map(s => `
+        <div class="sz-config-col">
+          <div class="sz-config-lbl" style="color:${TSZ_COLORS[s]}">${s} — ${TSZ_LABELS[s]}</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="text-align:center">
+              <input class="sz-input" type="number" min="0" max="20" step="0.5" value="${sizingConfig.bases[s].se}"
+                oninput="sizingConfig.bases['${s}'].se=+this.value;saveSizingConfig();renderSizingView()">
+              <div style="font-size:9px;color:#0369A1;font-weight:700;margin-top:2px">SE</div>
+            </div>
+            <div style="text-align:center">
+              <input class="sz-input" type="number" min="0" max="20" step="0.5" value="${sizingConfig.bases[s].ta}"
+                oninput="sizingConfig.bases['${s}'].ta=+this.value;saveSizingConfig();renderSizingView()">
+              <div style="font-size:9px;color:#D97706;font-weight:700;margin-top:2px">TA</div>
+            </div>
+          </div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+
+  // Legend strip
+  html += `<div style="display:flex;gap:16px;margin-bottom:14px;font-size:11px;color:#64748B;flex-wrap:wrap;align-items:center">
+    <strong style="color:#0F2544;font-size:12px">Projects</strong>
+    ${sizes.map(s => {
+      const b = sizingConfig.bases[s];
+      return `<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${TSZ_COLORS[s]};margin-right:4px;vertical-align:middle"></span>
+      ${s} = ${b.se} SE · ${b.ta} TA base</span>`;
+    }).join('')}
+    <span style="margin-left:auto;font-size:10px;color:#CBD5E1">Click a size, then select sub-level to apply to phases</span>
+  </div>`;
+
+  // Project cards
+  html += `<div>`;
+  projects.forEach(p => {
+    const cur    = p.tshirtSize || null;
+    const curLet = cur ? cur[0] : null;
+    const curFTE = cur ? getSizeFTE(cur) : null;
+
+    html += `<div class="sz-card">
+      <!-- Left: project info -->
+      <div style="width:230px;min-width:230px;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
+          <span class="sbadge sb-${p.stream}">${SLBL[p.stream]}</span>
+          ${cur ? `<span class="sz-badge-inline" style="background:${TSZ_COLORS[curLet]}">${cur}</span>` : ''}
+        </div>
+        <div style="font-size:13px;font-weight:600;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:225px" title="${p.name}">${p.name}</div>
+        <div style="font-size:10px;margin-top:3px;color:${cur ? TSZ_COLORS[curLet] : '#CBD5E1'}">
+          ${cur ? `${TSZ_LABELS[curLet]} ${cur[1]} · ${fmt(curFTE.se)} SE + ${fmt(curFTE.ta)} TA` : 'Not sized yet'}
+        </div>
+      </div>
+
+      <!-- Right: size picker -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;flex:1">
+        ${sizes.map(s => {
+          const isLetter = curLet === s;
+          return `<div>
+            <button class="sz-letter-btn ${isLetter ? 'sz-active' : ''}"
+              style="${isLetter ? `background:${TSZ_COLORS[s]};border-color:${TSZ_COLORS[s]}` : ''}"
+              onclick="(function(btn){
+                btn.closest('.sz-card').querySelectorAll('.sz-subs').forEach(x=>x.style.display='none');
+                var wrap=btn.closest('.sz-card').querySelector('.sz-subs-${s}-${p.id}');
+                if(wrap) wrap.style.display=wrap.style.display==='flex'?'none':'flex';
+              })(this)">
+              ${s}
+            </button>
+            <div class="sz-subs sz-subs-${s}-${p.id}" style="display:${isLetter ? 'flex' : 'none'};flex-direction:column;gap:3px;margin-top:4px">
+              ${[1,2,3].map(n => {
+                const code = s + n;
+                const fte  = getSizeFTE(code);
+                const inc  = n * sizingConfig.increment;
+                const isActive = cur === code;
+                return `<button class="sz-sub ${isActive ? 'sz-sub-active' : ''}"
+                  style="${isActive ? `background:${TSZ_COLORS[s]};border-color:${TSZ_COLORS[s]}` : ''}"
+                  onclick="applySizingToProject(${p.id},'${code}')"
+                  title="${code}: ${fmt(fte.se)} SE · ${fmt(fte.ta)} TA">
+                  <span style="font-weight:800">${code}</span>
+                  <span style="font-size:9px;opacity:.75">+${inc}%</span>
+                  <span style="color:${isActive?'#fff':'#0369A1'};font-size:10px">${fmt(fte.se)}SE</span>
+                  <span style="color:${isActive?'#fff':'#D97706'};font-size:10px">${fmt(fte.ta)}TA</span>
+                </button>`;
+              }).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+
+        ${cur ? `<button onclick="applySizingToProject(${p.id},null)"
+          style="align-self:flex-start;background:none;border:none;cursor:pointer;color:#CBD5E1;font-size:11px;padding:5px 8px;border-radius:4px;margin-left:auto"
+          title="Clear size">✕ Clear</button>` : ''}
+      </div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  document.getElementById('sizingView').innerHTML = html;
+}
 
 // ─── Timeline pan & zoom ───────────────────────────────────────────────────────
 let ganttZoom = 1;
