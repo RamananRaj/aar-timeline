@@ -2670,12 +2670,14 @@ function saveSizingConfig() { localStorage.setItem('aar_sizing', JSON.stringify(
 
 // ── Work Order ledger: time-bound capacity by pool (SE / TA / PM) ────────────
 const WO_DEFAULTS = [
-  { id:1, wo:'WO-2041', area:'Core platform — retainer',  se:5, ta:3, pm:2, start:'2026-05', end:'2026-12' },
-  { id:2, wo:'WO-2055', area:'Regulatory delivery SOW',    se:4, ta:3, pm:1, start:'2026-05', end:'2026-08' },
-  { id:3, wo:'WO-2068', area:'GPS / Non-Reg uplift',       se:3, ta:2, pm:1, start:'2026-07', end:'2026-12' },
+  { id:1, wo:'WO-2041', area:'Core platform — retainer',  se:5, ta:3, pm:2, start:'2026-05', end:'2026-12', projects:[8,9] },
+  { id:2, wo:'WO-2055', area:'Regulatory delivery SOW',    se:4, ta:3, pm:1, start:'2026-05', end:'2026-08', projects:[1,2,3,4,5,6] },
+  { id:3, wo:'WO-2068', area:'GPS / Non-Reg uplift',       se:3, ta:2, pm:1, start:'2026-07', end:'2026-12', projects:[11,14,15,16,17,18] },
 ];
-let workOrders = JSON.parse(localStorage.getItem('aar_wos') || 'null') || WO_DEFAULTS.map(w => ({ ...w }));
-let nextWoId   = Math.max(0, ...workOrders.map(w => w.id || 0)) + 1;
+let workOrders = JSON.parse(localStorage.getItem('aar_wos') || 'null') || WO_DEFAULTS.map(w => ({ ...w, projects:[...w.projects] }));
+workOrders.forEach(w => { if (!Array.isArray(w.projects)) w.projects = []; });
+let nextWoId    = Math.max(0, ...workOrders.map(w => w.id || 0)) + 1;
+let woAllocOpen = null;  // index of WO whose project-allocation panel is open
 function persistWOs() { localStorage.setItem('aar_wos', JSON.stringify(workOrders)); }
 
 const fmtN = v => (v % 1 === 0 ? v : (+v).toFixed(1));
@@ -2880,11 +2882,48 @@ function woEdit(i, field, val) {
   if (strip) strip.innerHTML = woCapStripHTML();
 }
 function woAdd() {
-  workOrders.push({ id: nextWoId++, wo:'', area:'', se:0, ta:0, pm:0, start:'2026-05', end:'2026-12' });
+  workOrders.push({ id: nextWoId++, wo:'', area:'', se:0, ta:0, pm:0, start:'2026-05', end:'2026-12', projects:[] });
   persistWOs(); renderSettingsView();
 }
 function woDel(i) {
+  if (woAllocOpen === i) woAllocOpen = null;
   workOrders.splice(i, 1); persistWOs(); renderSettingsView(); refreshCapacityViews();
+}
+function woToggleAlloc(i) { woAllocOpen = (woAllocOpen === i) ? null : i; renderSettingsView(); }
+/** Assign a project to a WO. Each project belongs to exactly one WO, so checking
+ *  here removes it from any other Work Order first (exclusive allocation). */
+function woToggleProj(i, projId) {
+  const w = workOrders[i]; if (!w) return;
+  w.projects = w.projects || [];
+  if (w.projects.includes(projId)) {
+    w.projects = w.projects.filter(x => x !== projId);
+  } else {
+    workOrders.forEach(o => { if (o !== w && Array.isArray(o.projects)) o.projects = o.projects.filter(x => x !== projId); });
+    w.projects.push(projId);
+  }
+  persistWOs(); renderSettingsView(); refreshCapacityViews();
+}
+function woOfProject(projId) { return workOrders.find(w => (w.projects || []).includes(projId)); }
+
+/** Per-WO rollup: each WO's capacity vs the summed monthly demand of its projects. */
+function computeWoRollup() {
+  const pd = computePhaseDemand();
+  return workOrders.map(w => {
+    const ids = new Set(w.projects || []);
+    let peakSe = 0, peakTa = 0, overMonths = 0;
+    const monthly = GCOLS.map((mo, mi) => {
+      let se = 0, ta = 0;
+      pd[mi].byProject.forEach(p => { if (ids.has(p.id)) { se += p.se; ta += p.ta; } });
+      const active = woActiveInMonth(w, mi);
+      const seCap = active ? (+w.se || 0) : 0, taCap = active ? (+w.ta || 0) : 0;
+      const seU = seCap > 0 ? se / seCap * 100 : (se > 0 ? Infinity : 0);
+      const taU = taCap > 0 ? ta / taCap * 100 : (ta > 0 ? Infinity : 0);
+      if (se > seCap || ta > taCap) overMonths++;
+      peakSe = Math.max(peakSe, seU); peakTa = Math.max(peakTa, taU);
+      return { mo, se:+se.toFixed(1), ta:+ta.toFixed(1), seCap, taCap };
+    });
+    return { w, projCount: ids.size, monthly, peakSe, peakTa, overMonths };
+  });
 }
 function woCapStripHTML() {
   const cap = computeCapacity();
@@ -2897,17 +2936,83 @@ function woCapStripHTML() {
 function renderSettingsView() {
   const inp = 'width:100%;padding:5px 7px;border:1px solid #E2E8F0;border-radius:5px;font-size:12px;color:#0F2544';
   const numInp = 'width:52px;padding:5px 4px;border:1px solid #E2E8F0;border-radius:5px;font-size:12px;text-align:center;color:#0F2544';
-  const rows = workOrders.map((w, i) => `
-    <tr>
-      <td style="padding:5px"><input style="${inp};font-family:monospace" value="${(w.wo||'').replace(/"/g,'&quot;')}" oninput="woEdit(${i},'wo',this.value)" placeholder="WO-…"></td>
-      <td style="padding:5px"><input style="${inp}" value="${(w.area||'').replace(/"/g,'&quot;')}" oninput="woEdit(${i},'area',this.value)" placeholder="Commercial area"></td>
-      <td style="padding:5px;text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.se}" oninput="woEdit(${i},'se',this.value)"></td>
-      <td style="padding:5px;text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.ta}" oninput="woEdit(${i},'ta',this.value)"></td>
-      <td style="padding:5px;text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.pm}" oninput="woEdit(${i},'pm',this.value)"></td>
-      <td style="padding:5px"><input type="month" style="${inp}" value="${w.start||''}" oninput="woEdit(${i},'start',this.value)"></td>
-      <td style="padding:5px"><input type="month" style="${inp}" value="${w.end||''}" oninput="woEdit(${i},'end',this.value)"></td>
-      <td style="padding:5px;text-align:center"><button onclick="woDel(${i})" title="Remove" style="border:none;background:none;cursor:pointer;color:#CBD5E1;font-size:17px;line-height:1" onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#CBD5E1'">×</button></td>
-    </tr>`).join('');
+  const esc = s => (s || '').replace(/"/g, '&quot;');
+
+  // ── Work Order cards (capacity + project allocation) ──────────────────────
+  const woCards = workOrders.map((w, i) => {
+    const allocated = (w.projects || []).map(id => projects.find(p => p.id === id)).filter(Boolean);
+    const chips = allocated.length
+      ? allocated.map(p => `<span onclick="woToggleProj(${i},${p.id})" title="Click to unassign" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;background:${SCOL[p.stream]}1A;color:${SCOL[p.stream]};border:1px solid ${SCOL[p.stream]}55;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;margin:2px 3px 2px 0">${p.name}<span style="opacity:.55">×</span></span>`).join('')
+      : `<span style="font-size:11px;color:#CBD5E1">No projects allocated yet</span>`;
+    const open = woAllocOpen === i;
+    const panel = open ? `
+      <div style="margin-top:8px;border:1px solid #E2E8F0;border-radius:8px;padding:6px;max-height:240px;overflow:auto;background:#F8FAFC">
+        ${projects.map(p => {
+          const owner = woOfProject(p.id);
+          const mine = owner && owner === w;
+          const elsewhere = owner && owner !== w;
+          return `<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:5px;font-size:12px;cursor:pointer;color:#0F2544" onmouseover="this.style.background='#EEF2F7'" onmouseout="this.style.background='none'">
+            <input type="checkbox" ${mine ? 'checked' : ''} onchange="woToggleProj(${i},${p.id})" style="cursor:pointer">
+            <span class="sbadge sb-${p.stream}" style="font-size:9px">${SLBL[p.stream]}</span>
+            <span style="flex:1">${p.name}</span>
+            ${elsewhere ? `<span style="font-size:9px;color:#94A3B8;white-space:nowrap">→ ${esc(owner.wo) || 'another WO'}</span>` : ''}
+          </label>`;
+        }).join('')}
+      </div>` : '';
+    return `<div style="border:1px solid #E2E8F0;border-radius:9px;padding:10px 12px;margin-bottom:10px">
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div><div style="font-size:9px;color:#94A3B8;font-weight:700;margin-bottom:2px">WO #</div><input style="${inp};width:108px;font-family:monospace" value="${esc(w.wo)}" oninput="woEdit(${i},'wo',this.value)" placeholder="WO-…"></div>
+        <div style="flex:1;min-width:150px"><div style="font-size:9px;color:#94A3B8;font-weight:700;margin-bottom:2px">Commercial area</div><input style="${inp}" value="${esc(w.area)}" oninput="woEdit(${i},'area',this.value)" placeholder="Commercial area"></div>
+        <div style="text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.se}" oninput="woEdit(${i},'se',this.value)"><div style="font-size:9px;color:#0369A1;font-weight:700;margin-top:2px">SE</div></div>
+        <div style="text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.ta}" oninput="woEdit(${i},'ta',this.value)"><div style="font-size:9px;color:#D97706;font-weight:700;margin-top:2px">TA</div></div>
+        <div style="text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.pm}" oninput="woEdit(${i},'pm',this.value)"><div style="font-size:9px;color:#7C3AED;font-weight:700;margin-top:2px">PM</div></div>
+        <div style="text-align:center"><input type="month" style="${inp};width:124px" value="${w.start||''}" oninput="woEdit(${i},'start',this.value)"><div style="font-size:9px;color:#94A3B8;margin-top:2px">start</div></div>
+        <div style="text-align:center"><input type="month" style="${inp};width:124px" value="${w.end||''}" oninput="woEdit(${i},'end',this.value)"><div style="font-size:9px;color:#94A3B8;margin-top:2px">end</div></div>
+        <button onclick="woDel(${i})" title="Remove work order" style="border:none;background:none;cursor:pointer;color:#CBD5E1;font-size:18px;line-height:1;margin-left:auto;align-self:center" onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#CBD5E1'">×</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap;border-top:1px dashed #EEF2F7;padding-top:8px">
+        <span style="font-size:10px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.4px">Funds</span>
+        <div style="flex:1;min-width:120px">${chips}</div>
+        <button class="btn btn-ghost btn-sm" onclick="woToggleAlloc(${i})" style="font-size:11px;white-space:nowrap">${open ? '✓ Done' : 'Allocate projects'} ▾</button>
+      </div>
+      ${panel}
+    </div>`;
+  }).join('');
+
+  // ── Per-WO rollup: capacity vs the demand of its allocated projects ───────
+  const rollup = computeWoRollup();
+  const pbadge = (pct, hasProj) => {
+    if (!hasProj) return '<span style="color:#CBD5E1;font-size:11px">—</span>';
+    const b = utilBand(pct, true);
+    const t = pct === Infinity ? '∞' : Math.round(pct) + '%';
+    return `<span style="background:${b.bg};color:${b.fg};font-weight:700;padding:2px 8px;border-radius:4px;font-size:11px">${t}</span>`;
+  };
+  const rollRows = rollup.map(r => `<tr>
+    <td style="font-weight:600;font-family:monospace">${esc(r.w.wo) || '—'}</td>
+    <td style="color:${r.w.area ? '#64748B' : '#CBD5E1'}">${esc(r.w.area) || '—'}</td>
+    <td style="text-align:center;font-weight:600">${r.projCount}</td>
+    <td style="text-align:center">${pbadge(r.peakSe, r.projCount > 0)}</td>
+    <td style="text-align:center">${pbadge(r.peakTa, r.projCount > 0)}</td>
+    <td style="text-align:center;font-weight:700;color:${r.overMonths > 0 ? '#DC2626' : '#16A34A'}">${r.overMonths > 0 ? '▲ ' + r.overMonths + ' mo' : 'OK'}</td>
+  </tr>`).join('');
+  const unalloc = projects.filter(p => (p.resources > 0 || (p.phases || []).some(ph => ph.startDate)) && !woOfProject(p.id));
+  const unallocNote = unalloc.length
+    ? `<div style="margin-top:10px;font-size:11px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:8px 10px"><strong>${unalloc.length} active project${unalloc.length !== 1 ? 's' : ''} not allocated to any Work Order:</strong> ${unalloc.map(p => p.name).join(', ')}</div>`
+    : `<div style="margin-top:10px;font-size:11px;color:#065F46;background:#D1FAE5;border-radius:6px;padding:8px 10px">✓ All active projects are allocated to a Work Order.</div>`;
+  const rollupCard = `
+    <div class="res-card">
+      <div class="res-card-title">📑 Per-Work-Order utilisation
+        <span class="res-hint">Each WO's capacity vs the peak monthly demand of the projects it funds</span>
+      </div>
+      <table class="dtable">
+        <thead><tr>
+          <th>WO #</th><th>Commercial area</th><th style="text-align:center">Projects</th>
+          <th style="text-align:center;color:#0369A1">SE peak</th><th style="text-align:center;color:#D97706">TA peak</th><th style="text-align:center">Status</th>
+        </tr></thead>
+        <tbody>${rollRows || `<tr><td colspan="6" style="text-align:center;color:#94A3B8;padding:12px">No work orders.</td></tr>`}</tbody>
+      </table>
+      ${unallocNote}
+    </div>`;
 
   const sizes = ['S','M','L','C'];
   const szConfig = `
@@ -2938,22 +3043,17 @@ function renderSettingsView() {
 
     <div class="res-card">
       <div class="res-card-title">💼 Commercial capacity — Work Orders
-        <span class="res-hint">Each WO contributes SE / TA / PM for the months it is active</span>
+        <span class="res-hint">Each WO contributes SE / TA / PM for the months it is active, and funds a set of projects</span>
         <button class="btn btn-primary btn-sm" onclick="woAdd()" style="margin-left:auto;font-size:11px">+ Add Work Order</button>
       </div>
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;text-align:left">
-          <th style="padding:0 5px 6px">WO #</th><th style="padding:0 5px 6px">Commercial area</th>
-          <th style="padding:0 5px 6px;text-align:center;color:#0369A1">SE</th><th style="padding:0 5px 6px;text-align:center;color:#D97706">TA</th><th style="padding:0 5px 6px;text-align:center;color:#7C3AED">PM</th>
-          <th style="padding:0 5px 6px">Start</th><th style="padding:0 5px 6px">End</th><th></th>
-        </tr></thead>
-        <tbody>${rows || `<tr><td colspan="8" style="padding:14px;color:#94A3B8;font-size:12px;text-align:center">No work orders yet — add one to set capacity.</td></tr>`}</tbody>
-      </table>
-      <div style="margin-top:16px;border-top:1px dashed #E2E8F0;padding-top:12px">
+      ${woCards || `<div style="padding:14px;color:#94A3B8;font-size:12px;text-align:center">No work orders yet — add one to set capacity.</div>`}
+      <div style="margin-top:8px;border-top:1px dashed #E2E8F0;padding-top:12px">
         <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Total available capacity by month</div>
         <div id="woCapStrip">${woCapStripHTML()}</div>
       </div>
     </div>
+
+    ${rollupCard}
 
     ${szConfig}`;
 }
