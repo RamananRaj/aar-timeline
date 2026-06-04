@@ -281,12 +281,14 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
   <div class="hdr-actions">
     <span id="syncBadge" style="font-size:11px;font-weight:600;color:#94A3B8;white-space:nowrap;padding:4px 10px;border:1px solid #334155;border-radius:5px;cursor:default" title="Cloud sync status">☁ Local only</span>
     <div class="view-tabs">
+      <button class="vtab" onclick="setView('dashboard',this)">📈 Dashboard</button>
       <button class="vtab active" onclick="setView('stream',this)">By Stream</button>
       <button class="vtab" onclick="setView('squad',this)">By Squad</button>
       <button class="vtab" onclick="setView('status',this)">By Status</button>
       <button class="vtab" onclick="setView('resources',this)">📊 Resources</button>
       <button class="vtab" onclick="setView('levelling',this)">⚖ Levelling</button>
       <button class="vtab" onclick="setView('sizing',this)">👕 Sizing</button>
+      <button class="vtab" onclick="setView('settings',this)">⚙ Settings</button>
     </div>
     <button class="btn btn-ghost" id="shareBtn" onclick="copyShareUrl(false)" title="Copy shareable link">🔗 Share</button>
     <button class="btn btn-ghost" onclick="openCloudModal()" title="Set up cloud sync so your team can collaborate">☁ Cloud Sync</button>
@@ -355,6 +357,7 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
   <div style="display:flex;gap:0;background:#F1F5F9;border-radius:6px;padding:2px;width:fit-content;margin-bottom:16px">
     <button class="rstab active" onclick="setResSub('role',this)">By Role (SE / TA)</button>
     <button class="rstab" onclick="setResSub('squad',this)">Reg vs Non-Reg</button>
+    <button class="rstab" onclick="setResSub('dvc',this)">Demand vs Capacity</button>
   </div>
 
   <!-- Chart card -->
@@ -382,7 +385,7 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
   <div id="resDrilldown" style="display:none"></div>
 
   <!-- Squad capacity model (collapsed by default) -->
-  <div class="res-card" style="padding-bottom:0">
+  <div class="res-card" id="squadCard" style="padding-bottom:0">
     <div class="res-card-title" style="cursor:pointer;user-select:none;margin-bottom:0;padding-bottom:16px" onclick="toggleSquadModel()">
       Squad Capacity Model
       <span class="res-hint">Slide committed squad size to see coverage gaps — dashed lines appear on the chart above</span>
@@ -437,6 +440,12 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
 
 <!-- ── T-Shirt Sizing View ── -->
 <div id="sizingView" style="display:none;padding:16px 24px 40px"></div>
+
+<!-- ── Management Dashboard View ── -->
+<div id="dashboardView" style="display:none;padding:16px 24px 40px"></div>
+
+<!-- ── Settings View ── -->
+<div id="settingsView" style="display:none;padding:16px 24px 40px"></div>
 
 <!-- ── Cloud Sync Modal ── -->
 <div class="mo" id="moCloud" onclick="bgClose(event,'moCloud')">
@@ -1008,27 +1017,26 @@ function sectionRow(label, count, color, extra='') {
 function setView(v, el) {
   viewMode = v;
   document.querySelectorAll('.vtab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  const ganttMain  = document.getElementById('ganttMain');
-  const resMain    = document.getElementById('resView');
-  const lvMain     = document.getElementById('lvView');
-  const sizingMain = document.getElementById('sizingView');
+  if (el) el.classList.add('active');
+  const ganttMain   = document.getElementById('ganttMain');
+  const resMain     = document.getElementById('resView');
+  const lvMain      = document.getElementById('lvView');
+  const sizingMain  = document.getElementById('sizingView');
+  const dashMain    = document.getElementById('dashboardView');
+  const setMain     = document.getElementById('settingsView');
+  [ganttMain, resMain, lvMain, sizingMain, dashMain, setMain].forEach(m => { if (m) m.style.display = 'none'; });
   if (v === 'resources') {
-    ganttMain.style.display  = 'none'; resMain.style.display   = 'block';
-    lvMain.style.display     = 'none'; sizingMain.style.display = 'none';
-    renderResView();
+    resMain.style.display = 'block'; renderResView();
   } else if (v === 'levelling') {
-    ganttMain.style.display  = 'none'; resMain.style.display   = 'none';
-    lvMain.style.display     = 'block'; sizingMain.style.display = 'none';
-    renderLvView();
+    lvMain.style.display = 'block'; renderLvView();
   } else if (v === 'sizing') {
-    ganttMain.style.display  = 'none'; resMain.style.display   = 'none';
-    lvMain.style.display     = 'none'; sizingMain.style.display = 'block';
-    renderSizingView();
+    sizingMain.style.display = 'block'; renderSizingView();
+  } else if (v === 'dashboard') {
+    dashMain.style.display = 'block'; renderDashboardView();
+  } else if (v === 'settings') {
+    setMain.style.display = 'block'; renderSettingsView();
   } else {
-    ganttMain.style.display  = ''; resMain.style.display    = 'none';
-    lvMain.style.display     = 'none'; sizingMain.style.display = 'none';
-    render();
+    ganttMain.style.display = ''; render();
   }
 }
 
@@ -1541,6 +1549,15 @@ function buildChartSVG(demands) {
 }
 
 function renderResView() {
+  const squadCard = document.getElementById('squadCard');
+  // ── Demand vs Capacity sub-tab — fully custom render, then bail out ───────
+  if (resSub === 'dvc') {
+    if (squadCard) squadCard.style.display = 'none';
+    document.getElementById('resDrilldown').style.display = 'none';
+    renderDvC();
+    return;
+  }
+  if (squadCard) squadCard.style.display = '';
   // ── Build demands array based on active sub-tab ───────────────────────────
   let demands;
   if (resSub === 'role') {
@@ -2646,6 +2663,300 @@ let sizingConfig = JSON.parse(localStorage.getItem('aar_sizing') || 'null') || {
   }
 };
 function saveSizingConfig() { localStorage.setItem('aar_sizing', JSON.stringify(sizingConfig)); }
+
+// ════════════════════════════════════════════════════════════════════════════
+//  CAPACITY MODEL — Work Orders (commercial) + Demand-vs-Capacity + Dashboard
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Work Order ledger: time-bound capacity by pool (SE / TA / PM) ────────────
+const WO_DEFAULTS = [
+  { id:1, wo:'WO-2041', area:'Core platform — retainer',  se:5, ta:3, pm:2, start:'2026-05', end:'2026-12' },
+  { id:2, wo:'WO-2055', area:'Regulatory delivery SOW',    se:4, ta:3, pm:1, start:'2026-05', end:'2026-08' },
+  { id:3, wo:'WO-2068', area:'GPS / Non-Reg uplift',       se:3, ta:2, pm:1, start:'2026-07', end:'2026-12' },
+];
+let workOrders = JSON.parse(localStorage.getItem('aar_wos') || 'null') || WO_DEFAULTS.map(w => ({ ...w }));
+let nextWoId   = Math.max(0, ...workOrders.map(w => w.id || 0)) + 1;
+function persistWOs() { localStorage.setItem('aar_wos', JSON.stringify(workOrders)); }
+
+const fmtN = v => (v % 1 === 0 ? v : (+v).toFixed(1));
+
+/** Is a Work Order active during GCOLS month index mi (0=May…7=Dec)? */
+function woActiveInMonth(wo, mi) {
+  const y = 2026, mo = 4 + mi;
+  const ms = new Date(y, mo, 1), me = new Date(y, mo + 1, 0);
+  const s = wo.start ? new Date(wo.start + '-01') : GSTART;
+  const eRaw = wo.end ? new Date(wo.end + '-01') : GEND;
+  const e = new Date(eRaw.getFullYear(), eRaw.getMonth() + 1, 0); // end-of-month inclusive
+  return s <= me && e >= ms;
+}
+
+/** Pooled available capacity per month → [{se,ta,pm}, …] across GCOLS. */
+function computeCapacity() {
+  return GCOLS.map((_, mi) => {
+    let se = 0, ta = 0, pm = 0;
+    workOrders.forEach(w => { if (woActiveInMonth(w, mi)) { se += (+w.se || 0); ta += (+w.ta || 0); pm += (+w.pm || 0); } });
+    return { se, ta, pm };
+  });
+}
+
+/** Utilisation banding → colour + label. pct is demand/capacity × 100. */
+function utilBand(pct, hasCap) {
+  if (!hasCap) return { bg:'#F1F5F9', fg:'#94A3B8', label:'—' };
+  if (pct < 70)   return { bg:'#DBEAFE', fg:'#1E40AF', label:'Under' };
+  if (pct < 95)   return { bg:'#D1FAE5', fg:'#065F46', label:'Healthy' };
+  if (pct <= 105) return { bg:'#FEF3C7', fg:'#92400E', label:'Tight' };
+  return { bg:'#FECACA', fg:'#991B1B', label:'Over' };
+}
+
+// ── Combined model used by both the DvC view and the Dashboard ───────────────
+function buildUtilModel() {
+  const pd  = computePhaseDemand();
+  const cap = computeCapacity();
+  const rows = GCOLS.map((mo, i) => {
+    const seDem = +pd[i].totalSE.toFixed(1), taDem = +pd[i].totalTA.toFixed(1);
+    const seCap = cap[i].se, taCap = cap[i].ta, pmCap = cap[i].pm;
+    const seUtil = seCap > 0 ? (seDem / seCap) * 100 : (seDem > 0 ? Infinity : 0);
+    const taUtil = taCap > 0 ? (taDem / taCap) * 100 : (taDem > 0 ? Infinity : 0);
+    return { mo, seDem, taDem, seCap, taCap, pmCap, seUtil, taUtil,
+             over: (seDem > seCap) || (taDem > taCap) };
+  });
+  // KPIs
+  const utilVals = [];
+  rows.forEach(r => { if (r.seCap > 0) utilVals.push(Math.min(r.seUtil, 999)); if (r.taCap > 0) utilVals.push(Math.min(r.taUtil, 999)); });
+  const avgUtil    = utilVals.length ? Math.round(utilVals.reduce((a,b)=>a+b,0) / utilVals.length) : 0;
+  const monthsOver = rows.filter(r => r.over).length;
+  let peak = { pct:-1, mo:'—', role:'' };
+  rows.forEach(r => {
+    if (r.seCap > 0 && r.seUtil > peak.pct) peak = { pct:Math.round(r.seUtil), mo:r.mo, role:'SE' };
+    if (r.taCap > 0 && r.taUtil > peak.pct) peak = { pct:Math.round(r.taUtil), mo:r.mo, role:'TA' };
+  });
+  let bench = 0;
+  rows.forEach(r => { bench += Math.max(0, r.seCap - r.seDem) + Math.max(0, r.taCap - r.taDem); });
+  return { rows, kpi:{ avgUtil, monthsOver, peak, bench:+bench.toFixed(1) } };
+}
+
+function refreshCapacityViews() {
+  if (document.getElementById('dashboardView').style.display !== 'none') renderDashboardView();
+  if (document.getElementById('resView').style.display !== 'none' && resSub === 'dvc') renderDvC();
+}
+
+// ── Grouped SE/TA demand bars + per-role capacity ticks ──────────────────────
+function buildDvcSVG(rows) {
+  const W=720, H=250, PL=34, PB=42, PTp=22;
+  const chartW=W-PL-8, chartH=H-PB-PTp, n=rows.length, slotW=chartW/n;
+  const barW=Math.min(24, slotW*0.28), gap=6, offset=(slotW-barW*2-gap)/2;
+  const maxVal=Math.max(1, ...rows.map(r=>Math.max(r.seDem,r.taDem,r.seCap,r.taCap)));
+  const step=maxVal<=5?1:maxVal<=10?2:maxVal<=20?4:5;
+  const yOf=v=>PTp+chartH-(v/maxVal)*chartH;
+  let els='';
+  for(let t=0;t<=maxVal+step-0.001;t+=step){const y=yOf(t).toFixed(1);
+    els+=`<line x1="${PL}" y1="${y}" x2="${W-4}" y2="${y}" stroke="#F1F5F9" stroke-width="1"/>`;
+    els+=`<text x="${PL-4}" y="${(+y+3).toFixed(1)}" text-anchor="end" fill="#CBD5E1" font-size="9" font-family="system-ui,sans-serif">${t}</text>`;}
+  rows.forEach((r,i)=>{
+    const x0=PL+i*slotW+offset;
+    [['SE',r.seDem,r.seCap,'#0369A1'],['TA',r.taDem,r.taCap,'#D97706']].forEach((arr,j)=>{
+      const [role,dem,cp,col]=arr; const x=x0+j*(barW+gap);
+      const over=dem>cp; const h=(dem/maxVal)*chartH; const y=PTp+chartH-h;
+      els+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" fill="${over?'#DC2626':col}" rx="2" opacity=".9"><title>${role} demand ${fmtN(dem)} vs capacity ${fmtN(cp)}</title></rect>`;
+      const cy=yOf(cp);
+      els+=`<line x1="${(x-1.5).toFixed(1)}" y1="${cy.toFixed(1)}" x2="${(x+barW+1.5).toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${col}" stroke-width="2" stroke-dasharray="3,2"><title>${role} capacity ${fmtN(cp)}</title></line>`;
+      const lbl=over?`▲${fmtN(+(dem-cp).toFixed(1))}`:fmtN(dem);
+      els+=`<text x="${(x+barW/2).toFixed(1)}" y="${(Math.min(y,cy)-3).toFixed(1)}" text-anchor="middle" fill="${over?'#DC2626':'#374151'}" font-size="8" font-weight="700" font-family="system-ui,sans-serif">${lbl}</text>`;
+    });
+    els+=`<text x="${(x0+barW+gap/2).toFixed(1)}" y="${H-PB+16}" text-anchor="middle" fill="#64748B" font-size="10" font-weight="600" font-family="system-ui,sans-serif">${rows[i].mo}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:760px;display:block;margin:0 auto">${els}</svg>`;
+}
+
+function dvcTable(rows) {
+  const cell = (dem, cap, util) => {
+    const b = utilBand(util, cap > 0);
+    const pct = cap > 0 ? (util === Infinity ? '∞' : Math.round(util) + '%') : '—';
+    return `<td style="text-align:center;font-weight:700;color:#0F2544">${fmtN(dem)}</td>
+            <td style="text-align:center;color:#64748B">${fmtN(cap)}</td>
+            <td style="text-align:center"><span style="background:${b.bg};color:${b.fg};font-weight:700;padding:2px 7px;border-radius:4px;font-size:11px">${pct}</span></td>`;
+  };
+  const body = rows.map(r => `<tr>
+    <td style="font-weight:600">${r.mo}</td>
+    ${cell(r.seDem, r.seCap, r.seUtil)}
+    ${cell(r.taDem, r.taCap, r.taUtil)}
+    <td style="text-align:center;color:#64748B">${fmtN(r.pmCap)}</td>
+  </tr>`).join('');
+  return `<table class="dtable" style="margin-top:18px">
+    <thead>
+      <tr>
+        <th rowspan="2" style="vertical-align:bottom">Month</th>
+        <th colspan="3" style="text-align:center;color:#0369A1;border-bottom:1px solid #E2E8F0">Software Engineers</th>
+        <th colspan="3" style="text-align:center;color:#D97706;border-bottom:1px solid #E2E8F0">Test Analysts</th>
+        <th rowspan="2" style="text-align:center;vertical-align:bottom;color:#7C3AED">PM cap</th>
+      </tr>
+      <tr style="font-size:10px;color:#94A3B8">
+        <th style="text-align:center">Dem</th><th style="text-align:center">Cap</th><th style="text-align:center">Util</th>
+        <th style="text-align:center">Dem</th><th style="text-align:center">Cap</th><th style="text-align:center">Util</th>
+      </tr>
+    </thead>
+    <tbody>${body}</tbody>
+  </table>`;
+}
+
+function renderDvC() {
+  const { rows } = buildUtilModel();
+  document.getElementById('resChartWrap').innerHTML = buildDvcSVG(rows) + dvcTable(rows);
+  document.getElementById('resLegend').innerHTML = `
+    <span><span class="res-leg-dot" style="background:#0369A1"></span>SE demand</span>
+    <span><span class="res-leg-dot" style="background:#D97706"></span>TA demand</span>
+    <span><span class="res-leg-dot" style="background:#DC2626"></span>Over capacity</span>
+    <span style="color:#94A3B8;font-size:10px">– – dashed tick = capacity for that role · capacity comes from Work Orders in ⚙ Settings · PM assumed sufficient</span>`;
+}
+
+// ── Management Dashboard: KPI tiles + SE/TA/PM utilisation heatmap ────────────
+function renderDashboardView() {
+  const { rows, kpi } = buildUtilModel();
+  const cap = computeCapacity();
+  const kpiCard = (label, val, sub, color) => `
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:16px 18px;flex:1;min-width:150px">
+      <div style="font-size:11px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${label}</div>
+      <div style="font-size:26px;font-weight:800;color:${color||'#0F2544'};line-height:1">${val}</div>
+      <div style="font-size:11px;color:#64748B;margin-top:6px">${sub}</div>
+    </div>`;
+
+  const heatCell = (dem, cap, util) => {
+    const b = utilBand(util, cap > 0);
+    const pct = cap > 0 ? (util === Infinity ? '∞' : Math.round(util) + '%') : '—';
+    return `<td style="padding:3px"><div title="demand ${fmtN(dem)} / capacity ${fmtN(cap)}" style="background:${b.bg};color:${b.fg};font-weight:700;font-size:12px;text-align:center;padding:9px 0;border-radius:5px">${pct}</div></td>`;
+  };
+  const pmCell = c => `<td style="padding:3px"><div title="PM allocation ${fmtN(c)} FTE" style="background:#F1EDFB;color:#6D28D9;font-weight:700;font-size:12px;text-align:center;padding:9px 0;border-radius:5px">${fmtN(c)}</div></td>`;
+  const monthHead = GCOLS.map(m => `<th style="font-size:11px;color:#64748B;font-weight:600;text-align:center;padding-bottom:6px">${m}</th>`).join('');
+
+  const html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+      <div>
+        <div style="font-size:18px;font-weight:800;color:#0F2544">Resource Utilisation — Portfolio</div>
+        <div style="font-size:12px;color:#64748B">Demand from project phases, matched against committed Work Order capacity · May–Dec 2026</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="setView('resources');const t=[...document.querySelectorAll('.vtab')].find(x=>x.textContent.includes('Resources'));if(t){document.querySelectorAll('.vtab').forEach(v=>v.classList.remove('active'));t.classList.add('active');}const d=[...document.querySelectorAll('.rstab')].find(x=>x.textContent.includes('Demand'));if(d)setResSub('dvc',d);" style="font-size:11px">Open detail →</button>
+    </div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px">
+      ${kpiCard('Avg utilisation', kpi.avgUtil + '%', 'SE &amp; TA, across active months', kpi.avgUtil > 105 ? '#DC2626' : (kpi.avgUtil < 70 ? '#1E40AF' : '#0F2544'))}
+      ${kpiCard('Months over capacity', kpi.monthsOver, 'SE or TA demand exceeds supply', kpi.monthsOver > 0 ? '#DC2626' : '#16A34A')}
+      ${kpiCard('Peak crunch', (kpi.peak.pct < 0 ? '—' : kpi.peak.mo + ' · ' + kpi.peak.pct + '%'), (kpi.peak.role ? kpi.peak.role + ' is the tightest pool' : 'No demand yet'), '#0F2544')}
+      ${kpiCard('Idle / bench', kpi.bench + ' FTE-mo', 'Unused SE + TA capacity', '#0369A1')}
+    </div>
+
+    <div class="res-card">
+      <div class="res-card-title">Utilisation heatmap
+        <span class="res-hint">SE &amp; TA shown as demand ÷ capacity · PM shown as allocated FTE (assumed sufficient)</span>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:11px;color:#64748B">
+        <span><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#DBEAFE;margin-right:4px;vertical-align:middle"></span>Under &lt;70%</span>
+        <span><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#D1FAE5;margin-right:4px;vertical-align:middle"></span>Healthy 70–94%</span>
+        <span><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#FEF3C7;margin-right:4px;vertical-align:middle"></span>Tight 95–105%</span>
+        <span><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#FECACA;margin-right:4px;vertical-align:middle"></span>Over &gt;105%</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr><th style="width:46px"></th>${monthHead}</tr></thead>
+        <tbody>
+          <tr><td style="font-weight:700;color:#0369A1;font-size:12px">SE</td>${rows.map(r=>heatCell(r.seDem,r.seCap,r.seUtil)).join('')}</tr>
+          <tr><td style="font-weight:700;color:#D97706;font-size:12px">TA</td>${rows.map(r=>heatCell(r.taDem,r.taCap,r.taUtil)).join('')}</tr>
+          <tr><td style="font-weight:700;color:#7C3AED;font-size:12px">PM</td>${cap.map(c=>pmCell(c.pm)).join('')}</tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="res-card">
+      <div class="res-card-title">SE / TA demand vs capacity</div>
+      ${buildDvcSVG(rows)}
+    </div>`;
+  document.getElementById('dashboardView').innerHTML = html;
+}
+
+// ── Settings: Work Order ledger + T-shirt sizing config ──────────────────────
+function woEdit(i, field, val) {
+  if (!workOrders[i]) return;
+  workOrders[i][field] = (field === 'se' || field === 'ta' || field === 'pm') ? (+val || 0) : val;
+  persistWOs();
+  const strip = document.getElementById('woCapStrip');
+  if (strip) strip.innerHTML = woCapStripHTML();
+}
+function woAdd() {
+  workOrders.push({ id: nextWoId++, wo:'', area:'', se:0, ta:0, pm:0, start:'2026-05', end:'2026-12' });
+  persistWOs(); renderSettingsView();
+}
+function woDel(i) {
+  workOrders.splice(i, 1); persistWOs(); renderSettingsView(); refreshCapacityViews();
+}
+function woCapStripHTML() {
+  const cap = computeCapacity();
+  const c = (lbl, key, col) => `<tr><td style="font-weight:700;color:${col};font-size:11px;padding-right:10px">${lbl}</td>${cap.map(x=>`<td style="text-align:center;font-size:12px;color:#0F2544;padding:3px 0">${fmtN(x[key])}</td>`).join('')}</tr>`;
+  return `<table style="width:100%;border-collapse:collapse;margin-top:4px">
+    <thead><tr><th style="width:42px"></th>${GCOLS.map(m=>`<th style="font-size:10px;color:#94A3B8;font-weight:600;text-align:center">${m}</th>`).join('')}</tr></thead>
+    <tbody>${c('SE','se','#0369A1')}${c('TA','ta','#D97706')}${c('PM','pm','#7C3AED')}</tbody>
+  </table>`;
+}
+function renderSettingsView() {
+  const inp = 'width:100%;padding:5px 7px;border:1px solid #E2E8F0;border-radius:5px;font-size:12px;color:#0F2544';
+  const numInp = 'width:52px;padding:5px 4px;border:1px solid #E2E8F0;border-radius:5px;font-size:12px;text-align:center;color:#0F2544';
+  const rows = workOrders.map((w, i) => `
+    <tr>
+      <td style="padding:5px"><input style="${inp};font-family:monospace" value="${(w.wo||'').replace(/"/g,'&quot;')}" oninput="woEdit(${i},'wo',this.value)" placeholder="WO-…"></td>
+      <td style="padding:5px"><input style="${inp}" value="${(w.area||'').replace(/"/g,'&quot;')}" oninput="woEdit(${i},'area',this.value)" placeholder="Commercial area"></td>
+      <td style="padding:5px;text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.se}" oninput="woEdit(${i},'se',this.value)"></td>
+      <td style="padding:5px;text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.ta}" oninput="woEdit(${i},'ta',this.value)"></td>
+      <td style="padding:5px;text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.pm}" oninput="woEdit(${i},'pm',this.value)"></td>
+      <td style="padding:5px"><input type="month" style="${inp}" value="${w.start||''}" oninput="woEdit(${i},'start',this.value)"></td>
+      <td style="padding:5px"><input type="month" style="${inp}" value="${w.end||''}" oninput="woEdit(${i},'end',this.value)"></td>
+      <td style="padding:5px;text-align:center"><button onclick="woDel(${i})" title="Remove" style="border:none;background:none;cursor:pointer;color:#CBD5E1;font-size:17px;line-height:1" onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#CBD5E1'">×</button></td>
+    </tr>`).join('');
+
+  const sizes = ['S','M','L','C'];
+  const szConfig = `
+    <div class="res-card">
+      <div class="res-card-title">👕 T-shirt sizing weights
+        <span class="res-hint">Base SE / TA FTEs per size and the % uplift per sub-level — drives demand on the timeline</span>
+      </div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#64748B;margin-bottom:5px">Increment / sub-level</div>
+          <div style="display:flex;align-items:center;gap:6px"><input type="number" min="5" max="100" step="5" value="${sizingConfig.increment}" style="${numInp};width:60px" oninput="sizingConfig.increment=+this.value;saveSizingConfig()"><span style="font-size:12px;color:#64748B">%</span></div>
+        </div>
+        ${sizes.map(s=>`<div>
+          <div style="font-size:11px;font-weight:700;color:${TSZ_COLORS[s]};margin-bottom:5px">${s} — ${TSZ_LABELS[s]}</div>
+          <div style="display:flex;gap:8px">
+            <div style="text-align:center"><input type="number" min="0" max="20" step="0.5" value="${sizingConfig.bases[s].se}" style="${numInp}" oninput="sizingConfig.bases['${s}'].se=+this.value;saveSizingConfig()"><div style="font-size:9px;color:#0369A1;font-weight:700;margin-top:2px">SE</div></div>
+            <div style="text-align:center"><input type="number" min="0" max="20" step="0.5" value="${sizingConfig.bases[s].ta}" style="${numInp}" oninput="sizingConfig.bases['${s}'].ta=+this.value;saveSizingConfig()"><div style="font-size:9px;color:#D97706;font-weight:700;margin-top:2px">TA</div></div>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+
+  document.getElementById('settingsView').innerHTML = `
+    <div style="margin-bottom:16px">
+      <div style="font-size:18px;font-weight:800;color:#0F2544">Settings</div>
+      <div style="font-size:12px;color:#64748B">Commercial capacity and sizing assumptions that feed Demand vs Capacity and the Dashboard</div>
+    </div>
+
+    <div class="res-card">
+      <div class="res-card-title">💼 Commercial capacity — Work Orders
+        <span class="res-hint">Each WO contributes SE / TA / PM for the months it is active</span>
+        <button class="btn btn-primary btn-sm" onclick="woAdd()" style="margin-left:auto;font-size:11px">+ Add Work Order</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;text-align:left">
+          <th style="padding:0 5px 6px">WO #</th><th style="padding:0 5px 6px">Commercial area</th>
+          <th style="padding:0 5px 6px;text-align:center;color:#0369A1">SE</th><th style="padding:0 5px 6px;text-align:center;color:#D97706">TA</th><th style="padding:0 5px 6px;text-align:center;color:#7C3AED">PM</th>
+          <th style="padding:0 5px 6px">Start</th><th style="padding:0 5px 6px">End</th><th></th>
+        </tr></thead>
+        <tbody>${rows || `<tr><td colspan="8" style="padding:14px;color:#94A3B8;font-size:12px;text-align:center">No work orders yet — add one to set capacity.</td></tr>`}</tbody>
+      </table>
+      <div style="margin-top:16px;border-top:1px dashed #E2E8F0;padding-top:12px">
+        <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Total available capacity by month</div>
+        <div id="woCapStrip">${woCapStripHTML()}</div>
+      </div>
+    </div>
+
+    ${szConfig}`;
+}
 
 /** Return { se, ta } FTEs for a size code like 'M2'.
  *  Formula: base × (1 + level × increment/100)
