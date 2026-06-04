@@ -1724,12 +1724,127 @@ function renderSquadModel(demands) {
     </div>`;
   }
 
-  document.getElementById('squadModel').innerHTML = `<div class="squad-grid">
+  // Store for export
+  lastSquadDemands = demands; lastSquadIsRole = isRole;
+  lastSquadMeta = { leftKey, rightKey, leftLabel, rightLabel, leftColor, rightColor, leftCap: regCore, rightCap: nrCore };
+
+  document.getElementById('squadModel').innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <div style="position:relative">
+        <button class="btn btn-ghost btn-sm" onclick="toggleSqExport(event)" style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap">
+          Copy <span style="font-size:9px;opacity:.7">▾</span>
+        </button>
+        <div id="sqExportMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.13);padding:5px;z-index:300;min-width:220px">
+          <button onclick="sqExportEmail()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">✉ Copy for email / rich text</button>
+          <button onclick="sqExportTSV()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">📋 Copy as TSV (spreadsheet)</button>
+          <button onclick="sqExportImage()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">🖼 Copy as image (Slack / visual)</button>
+        </div>
+      </div>
+    </div>
+    <div class="squad-grid" id="squadModelGrid">
     ${sumCard(leftColor,  leftPeak,  leftShort,  leftSurp,  'regCapVal', regCore, leftLabel,
       'regCore=+this.value;document.getElementById(\'regCapVal\').textContent=this.value;renderResView()')}
     ${sumCard(rightColor, rightPeak, rightShort, rightSurp, 'nrCapVal',  nrCore,  rightLabel,
       'nrCore=+this.value;document.getElementById(\'nrCapVal\').textContent=this.value;renderResView()')}
   </div>`;
+}
+
+// ─── Squad Capacity Model export ──────────────────────────────────────────────
+let lastSquadDemands = null, lastSquadIsRole = true, lastSquadMeta = {};
+
+function toggleSqExport(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('sqExportMenu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', () => {
+  const m = document.getElementById('sqExportMenu');
+  if (m) m.style.display = 'none';
+});
+
+function _buildSqTSV() {
+  if (!lastSquadDemands) return '';
+  const { leftKey, rightKey, leftLabel, rightLabel, leftCap, rightCap } = lastSquadMeta;
+  const header = `Month\t${leftLabel} Demand\t${leftLabel} Squad\t${leftLabel} Delta\t${rightLabel} Demand\t${rightLabel} Squad\t${rightLabel} Delta`;
+  const rows = GCOLS.map((m, i) => {
+    const d    = lastSquadDemands[i];
+    const lDem = d[leftKey]  || 0, lDelta = leftCap  - lDem;
+    const rDem = d[rightKey] || 0, rDelta = rightCap - rDem;
+    const fmt  = v => v === 0 ? '—' : v;
+    return `${m}\t${fmt(lDem)}\t${leftCap}\t${lDem > 0 ? (lDelta > 0 ? '+'+lDelta : lDelta) : '—'}\t${fmt(rDem)}\t${rightCap}\t${rDem > 0 ? (rDelta > 0 ? '+'+rDelta : rDelta) : '—'}`;
+  });
+  return [header, ...rows].join('\n');
+}
+
+function sqExportTSV() {
+  document.getElementById('sqExportMenu').style.display = 'none';
+  const tsv = _buildSqTSV();
+  navigator.clipboard.writeText(tsv).then(() => {
+    alert('✓ Copied as TSV — paste directly into Excel or Google Sheets');
+  });
+}
+
+function sqExportEmail() {
+  document.getElementById('sqExportMenu').style.display = 'none';
+  if (!lastSquadDemands) return;
+  const { leftKey, rightKey, leftLabel, rightLabel, leftColor, rightColor, leftCap, rightCap } = lastSquadMeta;
+  const th  = (t, c='#0F2544') => `<th style="padding:6px 10px;background:${c};color:#fff;font-size:11px;text-align:center;white-space:nowrap">${t}</th>`;
+  const td  = (t, red) => `<td style="padding:5px 10px;text-align:center;font-size:11px;color:${red?'#DC2626':t&&t!=='—'&&+t>0?'#16A34A':'#1E293B'};font-weight:${red||(!isNaN(+t)&&+t>0)?600:400}">${t}</td>`;
+  const rows = GCOLS.map((m, i) => {
+    const d = lastSquadDemands[i];
+    const lDem = d[leftKey] || 0, lDelta = leftCap - lDem;
+    const rDem = d[rightKey]|| 0, rDelta = rightCap- rDem;
+    const fmt = (dem, delta) => dem === 0 ? ['—','—','—'] : [dem, leftCap, delta > 0 ? `+${delta}` : `${delta}`];
+    const [ld,ls,ldelta] = fmt(lDem, lDelta);
+    const [rd,rs,rdelta] = fmt(rDem, rDelta);
+    return `<tr style="border-bottom:1px solid #F1F5F9">
+      <td style="padding:5px 10px;font-size:11px;font-weight:600;color:#374151">${m}</td>
+      ${td(ld)} ${td(ls)} ${td(ldelta, lDem>0&&lDelta<0)}
+      ${td(rd)} ${td(rs)} ${td(rdelta, rDem>0&&rDelta<0)}
+    </tr>`;
+  }).join('');
+  const html = `<table style="border-collapse:collapse;font-family:system-ui,sans-serif">
+    <thead>
+      <tr>${th('Month')}${th(leftLabel+' Demand',leftColor)}${th('Squad',leftColor)}${th('Delta',leftColor)}${th(rightLabel+' Demand',rightColor)}${th('Squad',rightColor)}${th('Delta',rightColor)}</tr>
+    </thead><tbody>${rows}</tbody></table>`;
+  navigator.clipboard.write([new ClipboardItem({'text/html': new Blob([html],{type:'text/html'})})]).then(() => {
+    alert('✓ Copied as rich text — paste into email, Confluence or Word');
+  }).catch(() => sqExportTSV());
+}
+
+function sqExportImage() {
+  document.getElementById('sqExportMenu').style.display = 'none';
+  const el = document.getElementById('squadModelGrid');
+  if (!el) return;
+  const w = el.scrollWidth + 32, h = el.scrollHeight + 32;
+  const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+    <foreignObject width="${w}" height="${h}">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:white;padding:16px;font-family:system-ui,sans-serif;font-size:12px">
+        ${el.outerHTML}
+      </div>
+    </foreignObject>
+  </svg>`;
+  const img = new Image();
+  const url = URL.createObjectURL(new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'}));
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,w,h);
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(blob => {
+      navigator.clipboard.write([new ClipboardItem({'image/png': blob})]).then(() => {
+        alert('✓ Copied as image — paste into Slack, Teams or email');
+      }).catch(() => {
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = 'squad_capacity_model.png';
+        a.click();
+      });
+    });
+  };
+  img.src = url;
 }
 
 // ─── Resource Levelling View ───────────────────────────────────────────────────
