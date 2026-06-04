@@ -816,14 +816,22 @@ let nextPhaseId = 9000;
 let viewMode  = 'stream';
 const expanded = new Set(); // project IDs that are expanded to show phases
 
-function persist() {
-  localStorage.setItem('aar_projs', JSON.stringify(projects));
-  // Cloud save — debounced 1.2s so rapid edits only trigger one request
+/** Everything that should travel with a shared cloud link.
+ *  v2 = object form (projects + Work Orders + sizing). Older links stored a
+ *  bare projects array — still loaded for backward compatibility on read. */
+function cloudPayload() {
+  return { v: 2, projects, workOrders: (typeof workOrders !== 'undefined' ? workOrders : []),
+           sizingConfig: (typeof sizingConfig !== 'undefined' ? sizingConfig : null) };
+}
+
+/** Debounced push of the full payload to the configured cloud backend. */
+function pushCloud() {
   if (!binId || !masterKey) return;
   clearTimeout(cloudTimer);
   setSyncBadge('saving');
   cloudTimer = setTimeout(async () => {
     try {
+      const content = JSON.stringify(cloudPayload(), null, 2);
       let r;
       if (backendType === 'gist') {
         r = await fetch(`${GITHUB_API}/gists/${binId}`, {
@@ -833,19 +841,24 @@ function persist() {
             'Authorization': `Bearer ${masterKey}`,
             'Accept': 'application/vnd.github+json'
           },
-          body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(projects, null, 2) } } })
+          body: JSON.stringify({ files: { [GIST_FILE]: { content } } })
         });
       } else {
         // Legacy JSONbin
         r = await fetch(`${JBIN_URL}/${binId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'X-Master-Key': masterKey },
-          body: JSON.stringify(projects)
+          body: content
         });
       }
       setSyncBadge(r.ok ? 'ready' : 'error');
     } catch { setSyncBadge('error'); }
   }, 1200);
+}
+
+function persist() {
+  localStorage.setItem('aar_projs', JSON.stringify(projects));
+  pushCloud();
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -2070,6 +2083,29 @@ function setSyncBadge(state, msg) {
   el.textContent       = msg || defaultMsg;
 }
 
+/** Apply data loaded from the cloud. Accepts the v2 object shape
+ *  { projects, workOrders, sizingConfig } or a legacy bare projects array. */
+function applyCloudData(data) {
+  if (Array.isArray(data)) {
+    projects = data;                                  // legacy: projects only
+  } else if (data && typeof data === 'object') {
+    if (Array.isArray(data.projects)) projects = data.projects;
+    if (Array.isArray(data.workOrders)) {
+      workOrders = data.workOrders;
+      workOrders.forEach(w => { if (!Array.isArray(w.projects)) w.projects = []; });
+      nextWoId = Math.max(0, ...workOrders.map(w => w.id || 0)) + 1;
+      localStorage.setItem('aar_wos', JSON.stringify(workOrders));
+    }
+    if (data.sizingConfig && typeof data.sizingConfig === 'object') {
+      sizingConfig = data.sizingConfig;
+      localStorage.setItem('aar_sizing', JSON.stringify(sizingConfig));
+    }
+  }
+  migrateProjects();
+  nextProjId = Math.max(...projects.map(p => p.id), 18) + 1;
+  localStorage.setItem('aar_projs', JSON.stringify(projects));
+}
+
 async function initCloud() {
   const cfg = parseHashConfig();
   if (cfg.id && cfg.secret) {
@@ -2094,11 +2130,7 @@ async function initCloud() {
         const json = await r.json();
         data = json.record;
       }
-      if (Array.isArray(data)) {
-        projects = data;
-        migrateProjects();
-        nextProjId = Math.max(...projects.map(p => p.id), 18) + 1;
-      }
+      applyCloudData(data);
       setSyncBadge('ready');
     } catch (e) {
       setSyncBadge('error', '⚠ Load failed — using local data');
@@ -2138,7 +2170,7 @@ async function setupCloud() {
       body: JSON.stringify({
         description: 'AAR Programs of Work — Timeline Manager Data',
         public: true,
-        files: { [GIST_FILE]: { content: JSON.stringify(projects, null, 2) } }
+        files: { [GIST_FILE]: { content: JSON.stringify(cloudPayload(), null, 2) } }
       })
     });
     if (!r.ok) {
@@ -2663,7 +2695,7 @@ let sizingConfig = JSON.parse(localStorage.getItem('aar_sizing') || 'null') || {
     C: { se: 6,   ta: 3   },
   }
 };
-function saveSizingConfig() { localStorage.setItem('aar_sizing', JSON.stringify(sizingConfig)); }
+function saveSizingConfig() { localStorage.setItem('aar_sizing', JSON.stringify(sizingConfig)); pushCloud(); }
 
 // ════════════════════════════════════════════════════════════════════════════
 //  CAPACITY MODEL — Work Orders (commercial) + Demand-vs-Capacity + Dashboard
@@ -2679,7 +2711,7 @@ let workOrders = JSON.parse(localStorage.getItem('aar_wos') || 'null') || WO_DEF
 workOrders.forEach(w => { if (!Array.isArray(w.projects)) w.projects = []; });
 let nextWoId    = Math.max(0, ...workOrders.map(w => w.id || 0)) + 1;
 let woAllocOpen = null;  // index of WO whose project-allocation panel is open
-function persistWOs() { localStorage.setItem('aar_wos', JSON.stringify(workOrders)); }
+function persistWOs() { localStorage.setItem('aar_wos', JSON.stringify(workOrders)); pushCloud(); }
 
 const fmtN = v => (v % 1 === 0 ? v : (+v).toFixed(1));
 
