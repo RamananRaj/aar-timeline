@@ -280,15 +280,16 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
   </div>
   <div class="hdr-actions">
     <span id="syncBadge" style="font-size:11px;font-weight:600;color:#94A3B8;white-space:nowrap;padding:4px 10px;border:1px solid #334155;border-radius:5px;cursor:default" title="Cloud sync status">☁ Local only</span>
+    <button id="internalToggle" onclick="toggleInternal()" title="Internal views" style="font-size:13px;font-weight:600;color:#94A3B8;background:transparent;border:1px solid #334155;border-radius:5px;padding:4px 9px;cursor:pointer;white-space:nowrap">🔒</button>
     <div class="view-tabs">
-      <button class="vtab" onclick="setView('dashboard',this)">📈 Dashboard</button>
+      <button class="vtab" id="tabDashboard" onclick="setView('dashboard',this)">📈 Dashboard</button>
       <button class="vtab active" onclick="setView('stream',this)">By Stream</button>
       <button class="vtab" onclick="setView('squad',this)">By Squad</button>
       <button class="vtab" onclick="setView('status',this)">By Status</button>
       <button class="vtab" onclick="setView('resources',this)">📊 Resources</button>
       <button class="vtab" onclick="setView('levelling',this)">⚖ Levelling</button>
       <button class="vtab" onclick="setView('sizing',this)">👕 Sizing</button>
-      <button class="vtab" onclick="setView('settings',this)">⚙ Settings</button>
+      <button class="vtab" id="tabSettings" onclick="setView('settings',this)">⚙ Settings</button>
     </div>
     <button class="btn btn-ghost" id="shareBtn" onclick="copyShareUrl(false)" title="Copy shareable link">🔗 Share</button>
     <button class="btn btn-ghost" onclick="openCloudModal()" title="Set up cloud sync so your team can collaborate">☁ Cloud Sync</button>
@@ -3299,6 +3300,43 @@ document.addEventListener('mouseup', () => {
   const wrap = document.getElementById('ganttWrapper');
   if (wrap) wrap.style.cursor = 'grab';
 });
+
+// ── Internal views toggle — hide Dashboard & Settings for customer demos ─────
+//    Default OFF (hidden). State is per-device (localStorage), so anyone opening
+//    a shared link sees them hidden until they explicitly enable internal mode.
+let internalMode = JSON.parse(localStorage.getItem('aar_internal') || 'false');
+function applyInternalMode() {
+  const d = document.getElementById('tabDashboard');
+  const s = document.getElementById('tabSettings');
+  if (d) d.style.display = internalMode ? '' : 'none';
+  if (s) s.style.display = internalMode ? '' : 'none';
+  const btn = document.getElementById('internalToggle');
+  if (btn) {
+    btn.textContent  = internalMode ? '🔓 Internal' : '🔒';
+    btn.style.color  = internalMode ? '#2DD4BF' : '#94A3B8';
+    btn.style.borderColor = internalMode ? '#0D9488' : '#334155';
+    btn.title = internalMode
+      ? 'Internal views (Dashboard & Settings) are visible — click to hide before presenting'
+      : 'Internal views hidden (customer-safe) — click to show Dashboard & Settings';
+  }
+  // If hiding while currently on a now-hidden view, fall back to the timeline
+  if (!internalMode && (viewMode === 'dashboard' || viewMode === 'settings')) {
+    const t = [...document.querySelectorAll('.vtab')].find(x => x.textContent.includes('By Stream'));
+    setView('stream', t);
+  }
+}
+function toggleInternal() {
+  internalMode = !internalMode;
+  localStorage.setItem('aar_internal', JSON.stringify(internalMode));
+  applyInternalMode();
+}
+// Hidden keyboard shortcut as a discreet trigger: Ctrl/Cmd + Shift + K
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'K' || e.key === 'k')) {
+    e.preventDefault(); toggleInternal();
+  }
+});
+applyInternalMode();
 
 initCloud();
 </script>
