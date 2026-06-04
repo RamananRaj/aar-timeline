@@ -97,6 +97,12 @@ input[type=search]{width:180px}
 .g-pbar:not(.g-pbar-tbd){cursor:grab;}
 .g-pbar.drag-on{cursor:grabbing;opacity:.75;z-index:100;box-shadow:0 3px 14px rgba(0,0,0,.28);}
 body.drag-active *{cursor:grabbing!important;user-select:none;}
+/* Phase vertical reorder */
+.ph-drag-handle{cursor:grab;color:#D1D5DB;font-size:13px;padding:1px 3px;flex-shrink:0;border:none;background:none;border-radius:3px;transition:color .1s;line-height:1;user-select:none}
+.ph-drag-handle:hover{color:#0D9488;background:#F0FDF9}
+.g-phase-row.ph-reorder-drag{opacity:.4}
+.g-phase-row.ph-drop-above{box-shadow:inset 0 2px 0 #0D9488}
+.g-phase-row.ph-drop-below{box-shadow:inset 0 -2px 0 #0D9488}
 .g-pbar-lbl{font-size:8px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .g-pbar-tbd{background:transparent!important;border-style:dashed;border-width:1.5px;top:8px;height:15px}
 
@@ -356,6 +362,17 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
     <div class="res-card-title">
       Monthly Resource Demand
       <span class="res-hint">Derived live from your projects · click a bar to see which programs drive that month's need</span>
+      <!-- Export dropdown -->
+      <div style="position:relative;margin-left:auto;flex-shrink:0" id="resExportWrap">
+        <button class="btn btn-ghost btn-sm" onclick="toggleResExport(event)" style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap">
+          Copy <span style="font-size:9px;opacity:.7">▾</span>
+        </button>
+        <div id="resExportMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.13);padding:5px;z-index:300;min-width:220px">
+          <button onclick="resExportEmail()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">✉ Copy for email / rich text</button>
+          <button onclick="resExportTSV()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">📋 Copy as TSV (spreadsheet)</button>
+          <button onclick="resExportImage()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">🖼 Copy as image (Slack / visual)</button>
+        </div>
+      </div>
     </div>
     <div id="resChartWrap" style="padding-bottom:4px"></div>
     <div class="res-legend" id="resLegend"></div>
@@ -588,12 +605,13 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
           <select class="fi" id="mopType" onchange="onPhaseTypeChange()">
             <option value="sd">Solution Design (SD)</option>
             <option value="dev">Development (DEV)</option>
+            <option value="custom">Custom</option>
             <option value="sit">System Integration Testing (SIT)</option>
+            <option value="iqa">Independent Quality Assurance (IQA)</option>
             <option value="uat">User Acceptance Testing (UAT)</option>
             <option value="golive">Go-Live / Deployment</option>
             <option value="planning">Planning</option>
             <option value="review">Review / Sign-off</option>
-            <option value="custom">Custom</option>
           </select>
         </div>
         <div class="fg">
@@ -648,12 +666,13 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
 const PT = {
   sd:       { label:'SD',       color:'#7C3AED', full:'Solution Design' },
   dev:      { label:'DEV',      color:'#1D4ED8', full:'Development' },
+  custom:   { label:'Custom',   color:'#F59E0B', full:'Custom' },
   sit:      { label:'SIT',      color:'#D97706', full:'SIT' },
+  iqa:      { label:'IQA',      color:'#0891B2', full:'Independent Quality Assurance' },
   uat:      { label:'UAT',      color:'#0D9488', full:'UAT' },
   golive:   { label:'Go-Live',  color:'#16A34A', full:'Go-Live' },
   planning: { label:'Plan',     color:'#64748B', full:'Planning' },
   review:   { label:'Review',   color:'#DB2777', full:'Review' },
-  custom:   { label:'Custom',   color:'#F59E0B', full:'Custom' },
 };
 const PALETTE = ['#7C3AED','#1D4ED8','#D97706','#0D9488','#16A34A','#DC2626','#DB2777','#0369A1','#64748B','#F59E0B'];
 
@@ -953,8 +972,9 @@ function ganttRow(p) {
         const resPill = resParts.length
           ? `<span style="font-size:9px;font-weight:700;color:#fff;background:${ph.color};padding:1px 6px;border-radius:3px;white-space:nowrap;opacity:.85;flex-shrink:0">${resParts.join(' · ')}</span>`
           : '';
-        html += `<div class="g-phase-row">
+        html += `<div class="g-phase-row" data-proj="${p.id}" data-phase-id="${ph.id}">
           <div class="g-phase-info" onclick="openPhaseModal(${p.id},${ph.id})">
+            <button class="ph-drag-handle" onmousedown="startPhaseReorder(event,${p.id},${ph.id})" title="Drag to reorder phases" onclick="event.stopPropagation()">⠿</button>
             ${dot}
             <span class="pbadge" style="background:${ph.color}">${ph.name}</span>
             <span style="font-size:11px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${fmtDate(ph.startDate)} → ${fmtDate(ph.endDate)}</span>
@@ -2252,6 +2272,152 @@ function renderStackedRoleLv() {
   ].map(s=>`<div class="lv-stat"><div class="lv-stat-val" style="color:${s.c};font-size:16px">${s.v}</div><div class="lv-stat-lbl">${s.l}</div></div>`).join('');
 }
 
+// ─── Resources chart export ───────────────────────────────────────────────────
+function toggleResExport(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('resExportMenu');
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', () => {
+  const m = document.getElementById('resExportMenu');
+  if (m) m.style.display = 'none';
+});
+
+function _getResDemands() {
+  const pd = computePhaseDemand();
+  if (resSub === 'role') {
+    return GCOLS.map((m, i) => ({ month:m, se: pd[i].totalSE, ta: pd[i].totalTA, total: +(pd[i].totalSE + pd[i].totalTA).toFixed(1) }));
+  }
+  return GCOLS.map((m, i) => ({
+    month: m,
+    reg:    +(pd[i].regSE    + pd[i].regTA   ).toFixed(1),
+    nonreg: +(pd[i].nonregSE + pd[i].nonregTA).toFixed(1),
+    total:  +(pd[i].regSE + pd[i].regTA + pd[i].nonregSE + pd[i].nonregTA).toFixed(1),
+  }));
+}
+
+function resExportTSV() {
+  document.getElementById('resExportMenu').style.display = 'none';
+  const rows = _getResDemands();
+  const isRole = resSub === 'role';
+  const header = isRole ? 'Month\tSE\tTA\tTotal' : 'Month\tRegulatory\tNon-Reg\tTotal';
+  const lines  = rows.map(d => isRole
+    ? `${d.month}\t${d.se}\t${d.ta}\t${d.total}`
+    : `${d.month}\t${d.reg}\t${d.nonreg}\t${d.total}`);
+  navigator.clipboard.writeText([header, ...lines].join('\n')).then(() => {
+    alert('✓ Copied as TSV — paste directly into Excel or Google Sheets');
+  });
+}
+
+function resExportEmail() {
+  document.getElementById('resExportMenu').style.display = 'none';
+  const rows  = _getResDemands();
+  const isRole = resSub === 'role';
+  const th    = (t) => `<th style="padding:6px 12px;background:#0F2544;color:#fff;font-size:12px;text-align:center">${t}</th>`;
+  const td    = (t, over) => `<td style="padding:6px 12px;text-align:center;font-size:12px;font-weight:${over?700:400};color:${over?'#DC2626':'#1E293B'}">${t}</td>`;
+  const hdrs  = isRole ? ['Month','SE','TA','Total'] : ['Month','Regulatory','Non-Reg','Total'];
+  const trs   = rows.filter(d => d.total > 0).map(d => {
+    const vals = isRole ? [d.month, d.se, d.ta, d.total] : [d.month, d.reg, d.nonreg, d.total];
+    return `<tr>${vals.map((v,i) => td(v, i===3 && v>10)).join('')}</tr>`;
+  }).join('');
+  const html  = `<table style="border-collapse:collapse;font-family:system-ui,sans-serif"><thead><tr>${hdrs.map(th).join('')}</tr></thead><tbody>${trs}</tbody></table>`;
+  const blob  = new Blob([html], { type: 'text/html' });
+  const item  = new ClipboardItem({ 'text/html': blob });
+  navigator.clipboard.write([item]).then(() => {
+    alert('✓ Copied as rich text — paste into email, Confluence or Word');
+  }).catch(() => resExportTSV());
+}
+
+function resExportImage() {
+  document.getElementById('resExportMenu').style.display = 'none';
+  const svg = document.querySelector('#resChartWrap svg');
+  if (!svg) return;
+  const svgStr  = new XMLSerializer().serializeToString(svg);
+  const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url     = URL.createObjectURL(svgBlob);
+  const img     = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width  = img.naturalWidth  || 720;
+    canvas.height = img.naturalHeight || 250;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(blob => {
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
+        alert('✓ Chart copied as image — paste into Slack, Teams or email');
+      }).catch(() => {
+        // Fallback: download
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = 'resource_demand_chart.png';
+        a.click();
+      });
+    });
+  };
+  img.src = url;
+}
+
+// ─── Phase vertical reorder — drag handle to reorder phases within a project ──
+let phReorderState = null;
+
+function startPhaseReorder(e, projId, phaseId) {
+  e.stopPropagation();
+  e.preventDefault();
+  const row = e.currentTarget.closest('.g-phase-row');
+  if (!row) return;
+  phReorderState = { projId, phaseId, row, targetRow: null, targetPos: null };
+  row.classList.add('ph-reorder-drag');
+  document.body.classList.add('drag-active');
+}
+
+document.addEventListener('mousemove', e => {
+  if (!phReorderState) return;
+  const { projId, row } = phReorderState;
+  const allRows = [...document.querySelectorAll(`.g-phase-row[data-proj="${projId}"]`)]
+    .filter(r => r !== row);
+  // Clear indicators
+  allRows.forEach(r => r.classList.remove('ph-drop-above', 'ph-drop-below'));
+  // Find closest row
+  let best = null, bestDist = Infinity;
+  allRows.forEach(r => {
+    const rect = r.getBoundingClientRect();
+    const mid  = rect.top + rect.height / 2;
+    const dist = Math.abs(e.clientY - mid);
+    if (dist < bestDist) { bestDist = dist; best = { r, mid }; }
+  });
+  if (best) {
+    phReorderState.targetRow = best.r;
+    phReorderState.targetPos = e.clientY < best.mid ? 'above' : 'below';
+    best.r.classList.add(phReorderState.targetPos === 'above' ? 'ph-drop-above' : 'ph-drop-below');
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  if (!phReorderState) return;
+  const { projId, phaseId, row, targetRow, targetPos } = phReorderState;
+  // Clear visual
+  document.querySelectorAll('.g-phase-row')
+    .forEach(r => r.classList.remove('ph-reorder-drag', 'ph-drop-above', 'ph-drop-below'));
+  document.body.classList.remove('drag-active');
+  phReorderState = null;
+
+  if (!targetRow) return;
+  const p = projects.find(x => x.id === projId);
+  if (!p?.phases) return;
+  const fromIdx = p.phases.findIndex(ph => ph.id === phaseId);
+  const targetId = +targetRow.dataset.phaseId;
+  if (fromIdx === -1 || isNaN(targetId)) return;
+  const [moved] = p.phases.splice(fromIdx, 1);
+  const toIdx   = p.phases.findIndex(ph => ph.id === targetId);
+  if (toIdx === -1) { p.phases.splice(fromIdx, 0, moved); return; }
+  p.phases.splice(targetPos === 'below' ? toIdx + 1 : toIdx, 0, moved);
+  persist();
+  render();
+});
+
 // ─── Phase drag — move bars on the Gantt to shift phase dates ─────────────────
 let phaseDragState = null;
 let phaseDragMoved = false;
@@ -2352,8 +2518,8 @@ const TSZ_COLORS  = { S:'#16A34A', M:'#0369A1', L:'#7C3AED', C:'#DC2626' };
 const TSZ_LABELS  = { S:'Small', M:'Medium', L:'Large', C:'Complex' };
 
 // Phase type weights — how SE and TA are distributed across phase types
-const PHASE_SE_W  = { sd:1.0, dev:1.0, sit:0.4, uat:0.2, golive:0.4, planning:1.0, review:0.3, custom:0.7 };
-const PHASE_TA_W  = { sd:0.0, dev:0.1, sit:0.8, uat:0.9, golive:0.3, planning:0.0, review:0.5, custom:0.5 };
+const PHASE_SE_W  = { sd:1.0, dev:1.0, sit:0.4, iqa:0.3, uat:0.2, golive:0.4, planning:1.0, review:0.3, custom:0.7 };
+const PHASE_TA_W  = { sd:0.0, dev:0.1, sit:0.8, iqa:0.9, uat:0.9, golive:0.3, planning:0.0, review:0.5, custom:0.5 };
 
 let sizingConfig = JSON.parse(localStorage.getItem('aar_sizing') || 'null') || {
   increment: 25,   // % added per sub-level: X1 = base×1.25, X2 = base×1.50, X3 = base×1.75
