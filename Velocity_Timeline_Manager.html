@@ -375,6 +375,7 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
           <button onclick="resExportEmail()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">✉ Copy for email / rich text</button>
           <button onclick="resExportTSV()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">📋 Copy as TSV (spreadsheet)</button>
           <button onclick="resExportImage()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">🖼 Copy as image (Slack / visual)</button>
+          <button onclick="resExportPPT()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">📊 Download as PowerPoint (.pptx)</button>
         </div>
       </div>
     </div>
@@ -1769,6 +1770,7 @@ function renderSquadModel(demands) {
           <button onclick="sqExportEmail()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">✉ Copy for email / rich text</button>
           <button onclick="sqExportTSV()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">📋 Copy as TSV (spreadsheet)</button>
           <button onclick="sqExportImage()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">🖼 Copy as image (Slack / visual)</button>
+          <button onclick="sqExportPPT()" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12px;color:#1E293B;cursor:pointer;border-radius:5px" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">📊 Download as PowerPoint (.pptx)</button>
         </div>
       </div>
     </div>
@@ -2463,6 +2465,15 @@ function _getResDemands() {
 
 function resExportTSV() {
   document.getElementById('resExportMenu').style.display = 'none';
+  if (resSub === 'dvc') {
+    const r = buildUtilModel().rows;
+    const u = (util, cap) => cap > 0 ? (util === Infinity ? 'over' : Math.round(util)) : '';
+    const header = 'Month\tSE Demand\tSE Capacity\tSE Util %\tTA Demand\tTA Capacity\tTA Util %\tPM Capacity';
+    const lines  = r.map(d => `${d.mo}\t${fmtN(d.seDem)}\t${fmtN(d.seCap)}\t${u(d.seUtil,d.seCap)}\t${fmtN(d.taDem)}\t${fmtN(d.taCap)}\t${u(d.taUtil,d.taCap)}\t${fmtN(d.pmCap)}`);
+    navigator.clipboard.writeText([header, ...lines].join('\n')).then(() =>
+      alert('✓ Copied Demand vs Capacity table as TSV — paste into Excel or Google Sheets'));
+    return;
+  }
   const rows = _getResDemands();
   const isRole = resSub === 'role';
   const header = isRole ? 'Month\tSE\tTA\tTotal' : 'Month\tRegulatory\tNon-Reg\tTotal';
@@ -2476,6 +2487,23 @@ function resExportTSV() {
 
 function resExportEmail() {
   document.getElementById('resExportMenu').style.display = 'none';
+  if (resSub === 'dvc') {
+    const r = buildUtilModel().rows;
+    const pct = (u, cap) => cap > 0 ? (u === Infinity ? '∞' : Math.round(u) + '%') : '—';
+    const numTd  = v => `<td style="padding:5px 10px;text-align:center;font-size:12px;color:#1E293B">${fmtN(v)}</td>`;
+    const utilTd = (u, cap) => { const b = utilBand(u, cap > 0); return `<td style="padding:5px 10px;text-align:center;font-size:12px;font-weight:700;color:${b.fg};background:${b.bg}">${pct(u, cap)}</td>`; };
+    const th  = t => `<th style="padding:6px 10px;background:#0F2544;color:#fff;font-size:12px;text-align:center">${t}</th>`;
+    const trs = r.map(d => `<tr><td style="padding:5px 10px;font-size:12px;font-weight:600;text-align:center">${d.mo}</td>${numTd(d.seDem)}${numTd(d.seCap)}${utilTd(d.seUtil,d.seCap)}${numTd(d.taDem)}${numTd(d.taCap)}${utilTd(d.taUtil,d.taCap)}${numTd(d.pmCap)}</tr>`).join('');
+    const html = `<table style="border-collapse:collapse;font-family:system-ui,sans-serif">
+      <thead>
+        <tr><th style="background:#0F2544"></th><th colspan="3" style="padding:5px 10px;background:#0369A1;color:#fff;font-size:11px;text-align:center">Software Engineers</th><th colspan="3" style="padding:5px 10px;background:#D97706;color:#fff;font-size:11px;text-align:center">Test Analysts</th><th style="background:#0F2544"></th></tr>
+        <tr>${['Month','Dem','Cap','Util','Dem','Cap','Util','PM cap'].map(th).join('')}</tr>
+      </thead><tbody>${trs}</tbody></table>`;
+    navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) })])
+      .then(() => alert('✓ Copied Demand vs Capacity table as rich text — paste into email, Confluence or Word'))
+      .catch(() => resExportTSV());
+    return;
+  }
   const rows  = _getResDemands();
   const isRole = resSub === 'role';
   const th    = (t) => `<th style="padding:6px 12px;background:#0F2544;color:#fff;font-size:12px;text-align:center">${t}</th>`;
@@ -2497,6 +2525,7 @@ function resExportImage() {
   document.getElementById('resExportMenu').style.display = 'none';
   const svg = document.querySelector('#resChartWrap svg');
   if (!svg) return;
+  if (resSub === 'dvc') { _dvcExportImage(svg); return; }
   const svgStr  = new XMLSerializer().serializeToString(svg);
   const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
   const url     = URL.createObjectURL(svgBlob);
@@ -2523,6 +2552,206 @@ function resExportImage() {
     });
   };
   img.src = url;
+}
+
+// ─── Demand vs Capacity: export chart + table together as one PNG ────────────
+function _rr(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function _dvcDrawTable(ctx, rows, x0, y0, W, m) {
+  const cols = [
+    { k:'mo', t:'Month', w:64, align:'left' },
+    { k:'seDem', t:'Dem', w:62 }, { k:'seCap', t:'Cap', w:62 }, { k:'seUtil', t:'Util', w:78 },
+    { k:'taDem', t:'Dem', w:62 }, { k:'taCap', t:'Cap', w:62 }, { k:'taUtil', t:'Util', w:78 },
+    { k:'pmCap', t:'PM cap', w:78 },
+  ];
+  const totW = cols.reduce((s, c) => s + c.w, 0), sx = W / totW;
+  cols.forEach(c => c.w *= sx);
+  const xs = []; let cx = x0; cols.forEach(c => { xs.push(cx); cx += c.w; });
+  ctx.textBaseline = 'middle';
+  ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#0369A1'; ctx.fillText('SOFTWARE ENGINEERS', (xs[1] + xs[4]) / 2, y0 + m.grpH / 2);
+  ctx.fillStyle = '#D97706'; ctx.fillText('TEST ANALYSTS', (xs[4] + xs[7]) / 2, y0 + m.grpH / 2);
+  const hy = y0 + m.grpH + m.headH / 2;
+  ctx.fillStyle = '#64748B';
+  cols.forEach((c, i) => { ctx.textAlign = c.align === 'left' ? 'left' : 'center'; ctx.fillText(c.t, c.align === 'left' ? xs[i] + 4 : xs[i] + c.w / 2, hy); });
+  ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x0, y0 + m.grpH + m.headH); ctx.lineTo(x0 + W, y0 + m.grpH + m.headH); ctx.stroke();
+  const pct = (u, cap) => cap > 0 ? (u === Infinity ? '∞' : Math.round(u) + '%') : '—';
+  let ry = y0 + m.grpH + m.headH;
+  rows.forEach(r => {
+    const cy = ry + m.rowH / 2;
+    cols.forEach((c, i) => {
+      const cxc = xs[i] + c.w / 2;
+      if (c.k === 'seUtil' || c.k === 'taUtil') {
+        const cap = c.k === 'seUtil' ? r.seCap : r.taCap, u = c.k === 'seUtil' ? r.seUtil : r.taUtil;
+        const b = utilBand(u, cap > 0), bw = Math.min(c.w - 14, 54), bh = 16;
+        ctx.fillStyle = b.bg; _rr(ctx, cxc - bw / 2, cy - bh / 2, bw, bh, 4); ctx.fill();
+        ctx.fillStyle = b.fg; ctx.font = '700 11px system-ui,sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(pct(u, cap), cxc, cy);
+      } else {
+        ctx.fillStyle = c.k === 'mo' ? '#0F2544' : '#334155';
+        ctx.font = (c.k === 'mo' ? '600' : '400') + ' 12px system-ui,sans-serif';
+        ctx.textAlign = c.align === 'left' ? 'left' : 'center';
+        ctx.fillText(c.k === 'mo' ? r.mo : fmtN(r[c.k]), c.align === 'left' ? xs[i] + 4 : cxc, cy);
+      }
+    });
+    ctx.strokeStyle = '#F1F5F9'; ctx.beginPath(); ctx.moveTo(x0, ry + m.rowH); ctx.lineTo(x0 + W, ry + m.rowH); ctx.stroke();
+    ry += m.rowH;
+  });
+}
+function _dvcExportImage(svg) {
+  const rows  = buildUtilModel().rows;
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('width', '720'); clone.setAttribute('height', '250');
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
+  const img = new Image();
+  img.onload = () => {
+    const W = 760, scale = 2, chartH = 250 * (W / 720);
+    const m = { grpH:18, headH:20, rowH:24 };
+    const gap = 12, tableTop = chartH + gap;
+    const tableH = m.grpH + m.headH + rows.length * m.rowH + 6;
+    const totalH = tableTop + tableH + 8;
+    const canvas = document.createElement('canvas');
+    canvas.width = W * scale; canvas.height = totalH * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, totalH);
+    ctx.drawImage(img, 0, 0, W, chartH);
+    URL.revokeObjectURL(url);
+    _dvcDrawTable(ctx, rows, 0, tableTop, W, m);
+    canvas.toBlob(blob => {
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        .then(() => alert('✓ Chart + table copied as image — paste into Slack, Teams or email'))
+        .catch(() => { const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = 'demand_vs_capacity.png'; a.click(); });
+    });
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); alert('Could not render the image — try the rich-text or TSV copy instead.'); };
+  img.src = url;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  PowerPoint export — lazy-loads PptxGenJS, builds a one-slide deck with the
+//  chart image + a styled table. Used by Resources, Squad model and Dashboard.
+// ════════════════════════════════════════════════════════════════════════════
+function ensurePptxLib(cb) {
+  if (window.PptxGenJS || window.pptxgen) { cb(); return; }
+  const urls = [
+    'https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js',
+    'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
+  ];
+  let i = 0;
+  (function load() {
+    if (i >= urls.length) { alert('Could not load the PowerPoint library — check your internet connection and try again.'); return; }
+    const s = document.createElement('script');
+    s.src = urls[i++];
+    s.onload = () => cb();
+    s.onerror = () => { s.remove(); load(); };
+    document.head.appendChild(s);
+  })();
+}
+const _hx = h => (h || '#000000').replace('#', '');
+/** Rasterise an inline SVG to a PNG data URL, sized from its viewBox. cb({png,w,h}) or cb(null). */
+function _svgPng(svg, cb) {
+  if (!svg) { cb(null); return; }
+  const vb = (svg.getAttribute('viewBox') || '0 0 720 250').trim().split(/\s+/).map(Number);
+  const w = vb[2] || 720, h = vb[3] || 250;
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('width', w); clone.setAttribute('height', h);
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
+  const img = new Image();
+  img.onload = () => {
+    const s = 2, c = document.createElement('canvas');
+    c.width = w * s; c.height = h * s;
+    const x = c.getContext('2d'); x.scale(s, s);
+    x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url); cb({ png: c.toDataURL('image/png'), w, h });
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); cb(null); };
+  img.src = url;
+}
+function _pptExport(o) {
+  ensurePptxLib(() => {
+    const P = window.PptxGenJS || window.pptxgen;
+    if (!P) { alert('PowerPoint library unavailable.'); return; }
+    const pptx = new P(); pptx.layout = 'LAYOUT_WIDE';
+    const slide = pptx.addSlide();
+    slide.addText(o.title, { x: 0.5, y: 0.3, w: 12.3, h: 0.5, fontSize: 22, bold: true, color: '0F2544' });
+    let y = 1.05;
+    if (o.subtitle) { slide.addText(o.subtitle, { x: 0.5, y: 0.85, w: 12.3, h: 0.3, fontSize: 12, color: '64748B' }); y = 1.3; }
+    if (o.kpiLine) { slide.addText(o.kpiLine, { x: 0.5, y: y, w: 12.3, h: 0.4, fontSize: 12, bold: true, color: '0F2544' }); y += 0.55; }
+    if (o.chart) { const iw = 8.4, ih = iw * (o.chart.h / o.chart.w); slide.addImage({ data: o.chart.png, x: 0.5, y: y, w: iw, h: ih }); y += ih + 0.3; }
+    if (o.tableRows) slide.addTable(o.tableRows, Object.assign({ x: 0.5, y: y, w: 12.3, fontFace: 'Arial', fontSize: 9, valign: 'middle', align: 'center', border: { type: 'solid', pt: 0.5, color: 'E2E8F0' }, color: '1E293B', autoPage: false }, o.tableOpts || {}));
+    slide.addText('AAR — Resource Utilisation · generated ' + new Date().toLocaleDateString(), { x: 0.5, y: 7.05, w: 12.3, h: 0.3, fontSize: 9, color: '94A3B8' });
+    pptx.writeFile({ fileName: o.fileName || 'AAR_export.pptx' }).catch(() => alert('Could not save the .pptx file.'));
+  });
+}
+
+function resExportPPT() {
+  document.getElementById('resExportMenu').style.display = 'none';
+  const svg = document.querySelector('#resChartWrap svg');
+  const H = t => ({ text: t, options: { bold: true, color: 'FFFFFF', fill: '0F2544' } });
+  if (resSub === 'dvc') {
+    const rows = buildUtilModel().rows;
+    const pc = (u, cap) => cap > 0 ? (u === Infinity ? 'over' : Math.round(u) + '%') : '—';
+    const grp = [
+      { text: '', options: { fill: '0F2544' } },
+      { text: 'Software Engineers', options: { colspan: 3, fill: '0369A1', color: 'FFFFFF', bold: true } },
+      { text: 'Test Analysts', options: { colspan: 3, fill: 'D97706', color: 'FFFFFF', bold: true } },
+      { text: '', options: { fill: '0F2544' } }
+    ];
+    const sub = ['Month', 'Dem', 'Cap', 'Util', 'Dem', 'Cap', 'Util', 'PM cap'].map(H);
+    const body = rows.map(r => {
+      const s = utilBand(r.seUtil, r.seCap > 0), t = utilBand(r.taUtil, r.taCap > 0);
+      return [
+        { text: r.mo, options: { bold: true } },
+        { text: String(fmtN(r.seDem)) }, { text: String(fmtN(r.seCap)), options: { color: '64748B' } },
+        { text: pc(r.seUtil, r.seCap), options: { bold: true, fill: _hx(s.bg), color: _hx(s.fg) } },
+        { text: String(fmtN(r.taDem)) }, { text: String(fmtN(r.taCap)), options: { color: '64748B' } },
+        { text: pc(r.taUtil, r.taCap), options: { bold: true, fill: _hx(t.bg), color: _hx(t.fg) } },
+        { text: String(fmtN(r.pmCap)), options: { color: '64748B' } }
+      ];
+    });
+    _svgPng(svg, chart => _pptExport({ title: 'Resource Demand vs Capacity', subtitle: 'SE & TA demand matched to Work Order capacity · May–Dec 2026', chart, tableRows: [grp, sub, ...body], tableOpts: { colW: [1.3, 1.4, 1.4, 1.7, 1.4, 1.4, 1.7, 1.6] }, fileName: 'Demand_vs_Capacity.pptx' }));
+    return;
+  }
+  const data = _getResDemands(), isRole = resSub === 'role';
+  const head = (isRole ? ['Month', 'SE', 'TA', 'Total'] : ['Month', 'Regulatory', 'Non-Reg', 'Total']).map(H);
+  const body = data.filter(d => d.total > 0).map(d => {
+    const v = isRole ? [d.month, d.se, d.ta, d.total] : [d.month, d.reg, d.nonreg, d.total];
+    return v.map((x, i) => ({ text: String(x), options: { bold: i === 0 } }));
+  });
+  _svgPng(svg, chart => _pptExport({ title: isRole ? 'Monthly Resource Demand — SE / TA' : 'Monthly Resource Demand — Reg vs Non-Reg', subtitle: 'Derived from project phases · May–Dec 2026', chart, tableRows: [head, ...body], fileName: 'Resource_Demand.pptx' }));
+}
+
+function sqExportPPT() {
+  document.getElementById('sqExportMenu').style.display = 'none';
+  if (!lastSquadDemands) { alert('Open the Squad Capacity Model first.'); return; }
+  const { leftKey, rightKey, leftLabel, rightLabel, leftCap, rightCap } = lastSquadMeta;
+  const H = t => ({ text: t, options: { bold: true, color: 'FFFFFF', fill: '0F2544' } });
+  const head = ['Month', leftLabel + ' Dem', leftLabel + ' Cap', 'Δ', rightLabel + ' Dem', rightLabel + ' Cap', 'Δ'].map(H);
+  const body = GCOLS.map((m, i) => {
+    const d = lastSquadDemands[i];
+    const lDem = d[leftKey] || 0, lD = leftCap - lDem, rDem = d[rightKey] || 0, rD = rightCap - rDem;
+    const dc = (dem, delta) => dem === 0 ? { text: '—' } : { text: (delta > 0 ? '+' + delta : String(delta)), options: { bold: true, color: delta < 0 ? 'DC2626' : '16A34A' } };
+    return [{ text: m, options: { bold: true } }, { text: lDem === 0 ? '—' : String(lDem) }, { text: String(leftCap), options: { color: '64748B' } }, dc(lDem, lD), { text: rDem === 0 ? '—' : String(rDem) }, { text: String(rightCap), options: { color: '64748B' } }, dc(rDem, rD)];
+  });
+  _svgPng(document.querySelector('#squadModel svg'), chart => _pptExport({ title: 'Squad Capacity Model', subtitle: leftLabel + ' vs ' + rightLabel + ' · committed capacity vs demand', chart, tableRows: [head, ...body], fileName: 'Squad_Capacity_Model.pptx' }));
+}
+
+function dashExportPPT() {
+  const { rows, kpi } = buildUtilModel();
+  const cap = computeCapacity();
+  const H = t => ({ text: t, options: { bold: true, color: 'FFFFFF', fill: '0F2544', align: 'center' } });
+  const pc = (u, c) => c > 0 ? (u === Infinity ? 'over' : Math.round(u) + '%') : '—';
+  const head = ['Pool', ...GCOLS].map(H);
+  const seRow = [{ text: 'SE', options: { bold: true, color: '0369A1' } }, ...rows.map(r => { const b = utilBand(r.seUtil, r.seCap > 0); return { text: pc(r.seUtil, r.seCap), options: { fill: _hx(b.bg), color: _hx(b.fg), bold: true } }; })];
+  const taRow = [{ text: 'TA', options: { bold: true, color: 'D97706' } }, ...rows.map(r => { const b = utilBand(r.taUtil, r.taCap > 0); return { text: pc(r.taUtil, r.taCap), options: { fill: _hx(b.bg), color: _hx(b.fg), bold: true } }; })];
+  const pmRow = [{ text: 'PM', options: { bold: true, color: '7C3AED' } }, ...cap.map(c => ({ text: String(fmtN(c.pm)), options: { fill: 'F1EDFB', color: '6D28D9' } }))];
+  const kpiLine = `Avg utilisation: ${kpi.avgUtil}%     ·     Months over capacity: ${kpi.monthsOver}     ·     Peak crunch: ${kpi.peak.pct < 0 ? '—' : kpi.peak.mo + ' ' + kpi.peak.pct + '%'}     ·     Idle / bench: ${kpi.bench} FTE-mo`;
+  _svgPng(document.querySelector('#dashboardView svg'), chart => _pptExport({ title: 'Resource Utilisation — Portfolio', subtitle: 'Demand from project phases vs committed Work Order capacity · May–Dec 2026', kpiLine, chart, tableRows: [head, seRow, taRow, pmRow], fileName: 'Resource_Utilisation_Dashboard.pptx' }));
 }
 
 // ─── Phase vertical reorder — drag handle to reorder phases within a project ──
@@ -2869,7 +3098,10 @@ function renderDashboardView() {
         <div style="font-size:18px;font-weight:800;color:#0F2544">Resource Utilisation — Portfolio</div>
         <div style="font-size:12px;color:#64748B">Demand from project phases, matched against committed Work Order capacity · May–Dec 2026</div>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="setView('resources');const t=[...document.querySelectorAll('.vtab')].find(x=>x.textContent.includes('Resources'));if(t){document.querySelectorAll('.vtab').forEach(v=>v.classList.remove('active'));t.classList.add('active');}const d=[...document.querySelectorAll('.rstab')].find(x=>x.textContent.includes('Demand'));if(d)setResSub('dvc',d);" style="font-size:11px">Open detail →</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="dashExportPPT()" style="font-size:11px">📊 PowerPoint</button>
+        <button class="btn btn-ghost btn-sm" onclick="setView('resources');const t=[...document.querySelectorAll('.vtab')].find(x=>x.textContent.includes('Resources'));if(t){document.querySelectorAll('.vtab').forEach(v=>v.classList.remove('active'));t.classList.add('active');}const d=[...document.querySelectorAll('.rstab')].find(x=>x.textContent.includes('Demand'));if(d)setResSub('dvc',d);" style="font-size:11px">Open detail →</button>
+      </div>
     </div>
 
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px">
