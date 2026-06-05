@@ -3007,18 +3007,19 @@ function buildUtilModel() {
     return { mo, seDem, taDem, baDem, seCap, taCap, baCap, pmCap, seUtil, taUtil, baUtil,
              over: (seDem > seCap) || (taDem > taCap) || (baDem > baCap) };
   });
-  // KPIs — a role with zero demand across the whole horizon isn't part of the
-  // plan yet, so it's excluded from the blended average (its idle capacity still
-  // shows in the Idle/bench KPI). This keeps the headline meaningful as roles
-  // like BA are introduced before any demand has been entered for them.
+  // KPIs — "Avg utilisation" is FTE-WEIGHTED: total demand FTE ÷ total capacity
+  // FTE across the period, summed over roles that have demand. Weighting by
+  // actual pool size (rather than averaging percentages) stops a small pool's
+  // spikes from distorting the portfolio figure. A role with zero demand across
+  // the whole horizon isn't in the plan yet, so it's left out until it has demand.
   const hasSeDem = rows.some(r => r.seDem > 0), hasTaDem = rows.some(r => r.taDem > 0), hasBaDem = rows.some(r => r.baDem > 0);
-  const utilVals = [];
+  let demSum = 0, capSum = 0;
   rows.forEach(r => {
-    if (hasSeDem && r.seCap > 0) utilVals.push(Math.min(r.seUtil, 999));
-    if (hasTaDem && r.taCap > 0) utilVals.push(Math.min(r.taUtil, 999));
-    if (hasBaDem && r.baCap > 0) utilVals.push(Math.min(r.baUtil, 999));
+    if (hasSeDem) { demSum += r.seDem; capSum += r.seCap; }
+    if (hasTaDem) { demSum += r.taDem; capSum += r.taCap; }
+    if (hasBaDem) { demSum += r.baDem; capSum += r.baCap; }
   });
-  const avgUtil    = utilVals.length ? Math.round(utilVals.reduce((a,b)=>a+b,0) / utilVals.length) : 0;
+  const avgUtil    = capSum > 0 ? Math.round(demSum / capSum * 100) : 0;
   const monthsOver = rows.filter(r => r.over).length;
   let peak = { pct:-1, mo:'—', role:'' };
   rows.forEach(r => {
@@ -3188,9 +3189,9 @@ function renderDvC() {
 function renderDashboardView() {
   const { rows, kpi } = buildUtilModel();
   const cap = computeCapacity();
-  const kpiCard = (label, val, sub, color) => `
-    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:16px 18px;flex:1;min-width:150px">
-      <div style="font-size:11px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${label}</div>
+  const kpiCard = (label, val, sub, color, tip) => `
+    <div ${tip ? `title="${tip}"` : ''} style="background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:16px 18px;flex:1;min-width:150px;${tip ? 'cursor:help' : ''}">
+      <div style="font-size:11px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${label}${tip ? ' <span style="color:#CBD5E1">ⓘ</span>' : ''}</div>
       <div style="font-size:26px;font-weight:800;color:${color||'#0F2544'};line-height:1">${val}</div>
       <div style="font-size:11px;color:#64748B;margin-top:6px">${sub}</div>
     </div>`;
@@ -3215,11 +3216,14 @@ function renderDashboardView() {
       </div>
     </div>
 
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px">
-      ${kpiCard('Avg utilisation', kpi.avgUtil + '%', 'SE, TA &amp; BA, across active months', kpi.avgUtil > 105 ? '#DC2626' : (kpi.avgUtil < 70 ? '#1E40AF' : '#0F2544'))}
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      ${kpiCard('Avg utilisation', kpi.avgUtil + '%', 'FTE-weighted across SE, TA &amp; BA', kpi.avgUtil > 105 ? '#DC2626' : (kpi.avgUtil < 70 ? '#1E40AF' : '#0F2544'), 'Weighted utilisation = total demand FTE ÷ total capacity FTE across SE, TA and BA over the period. Each role is weighted by its actual size, so a small pool spiking over capacity does not distort the portfolio figure — unlike a plain average of percentages.')}
       ${kpiCard('Months over capacity', kpi.monthsOver, 'SE, TA or BA demand exceeds supply', kpi.monthsOver > 0 ? '#DC2626' : '#16A34A')}
       ${kpiCard('Peak crunch', (kpi.peak.pct < 0 ? '—' : kpi.peak.mo + ' · ' + kpi.peak.pct + '%'), (kpi.peak.role ? kpi.peak.role + ' is the tightest pool' : 'No demand yet'), '#0F2544')}
       ${kpiCard('Idle / bench', kpi.bench + ' FTE-mo', 'Unused SE + TA + BA capacity', '#0369A1')}
+    </div>
+    <div style="font-size:11px;color:#94A3B8;margin-bottom:20px;line-height:1.5">
+      <strong style="color:#64748B">Avg utilisation is FTE-weighted</strong> — total demand FTE ÷ total capacity FTE across SE, TA &amp; BA for the period (e.g. 30 FTE-months of demand against 40 of capacity = 75%). This weights each role by its real size, so a small pool running hot doesn't skew the headline the way a simple average of the monthly percentages would.
     </div>
 
     <div class="res-card">
