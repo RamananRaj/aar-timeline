@@ -645,12 +645,17 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
         <div class="fg">
           <label class="fl">SE FTEs</label>
           <input class="fi" type="number" id="mopSeFte" min="0" max="10" step="0.5" placeholder="0">
-          <div class="fhint">Software Engineers on this phase</div>
+          <div class="fhint">Software Engineers</div>
         </div>
         <div class="fg">
           <label class="fl">TA FTEs</label>
           <input class="fi" type="number" id="mopTaFte" min="0" max="10" step="0.5" placeholder="0">
-          <div class="fhint">Test Analysts on this phase</div>
+          <div class="fhint">Test Analysts</div>
+        </div>
+        <div class="fg">
+          <label class="fl">BA FTEs</label>
+          <input class="fi" type="number" id="mopBaFte" min="0" max="10" step="0.5" placeholder="0">
+          <div class="fhint">Business Analysts</div>
         </div>
       </div>
       <div class="fg">
@@ -800,6 +805,7 @@ function migrateProjects() {
     const defProj = DEFAULTS.find(d => d.id === p.id);
     // Migrate seFte/taFte on phases that predate those fields
     (p.phases || []).forEach(ph => {
+      if (ph.baFte == null) ph.baFte = 0;   // BA role added later — default to 0
       if (ph.seFte == null || ph.taFte == null) {
         const defPh = defProj ? (defProj.phases || []).find(d => d.id === ph.id) : null;
         if (ph.seFte == null) ph.seFte = defPh ? (defPh.seFte || 0) : 0;
@@ -1312,6 +1318,7 @@ function openPhaseModal(projId, phaseId) {
     document.getElementById('mopEnd').value         = ph.endDate   || '';
     document.getElementById('mopSeFte').value       = ph.seFte != null ? ph.seFte : '';
     document.getElementById('mopTaFte').value       = ph.taFte != null ? ph.taFte : '';
+    document.getElementById('mopBaFte').value       = ph.baFte != null ? ph.baFte : '';
     document.getElementById('mopNotes').value       = ph.notes     || '';
     renderColorPicker(ph.color);
     del.style.display = 'inline-flex';
@@ -1323,6 +1330,7 @@ function openPhaseModal(projId, phaseId) {
     document.getElementById('mopEnd').value   = '';
     document.getElementById('mopSeFte').value = '';
     document.getElementById('mopTaFte').value = '';
+    document.getElementById('mopBaFte').value = '';
     document.getElementById('mopNotes').value = '';
     renderColorPicker(PT['dev'].color);
     del.style.display = 'none';
@@ -1341,6 +1349,7 @@ function savePhase() {
 
   const seFteRaw = parseFloat(document.getElementById('mopSeFte').value);
   const taFteRaw = parseFloat(document.getElementById('mopTaFte').value);
+  const baFteRaw = parseFloat(document.getElementById('mopBaFte').value);
   const data = {
     type:      document.getElementById('mopType').value,
     name,
@@ -1349,6 +1358,7 @@ function savePhase() {
     endDate:   document.getElementById('mopEnd').value,
     seFte:     isNaN(seFteRaw) ? 0 : seFteRaw,
     taFte:     isNaN(taFteRaw) ? 0 : taFteRaw,
+    baFte:     isNaN(baFteRaw) ? 0 : baFteRaw,
     notes:     document.getElementById('mopNotes').value.trim(),
   };
   if (phaseId) {
@@ -2222,16 +2232,17 @@ function computePhaseDemand() {
     const me = new Date(year, month + 1, 0);     // last day of month
 
     const byProject = projects.map(p => {
-      let se = 0, ta = 0;
+      let se = 0, ta = 0, ba = 0;
       (p.phases || []).forEach(ph => {
         if (!ph.startDate || !ph.endDate) return;
         const ps = new Date(ph.startDate), pe = new Date(ph.endDate);
         if (ps <= me && pe >= ms) {
           se += (ph.seFte || 0);
           ta += (ph.taFte || 0);
+          ba += (ph.baFte || 0);
         }
       });
-      return { id: p.id, name: p.name, stream: p.stream, squad: p.squad, se, ta };
+      return { id: p.id, name: p.name, stream: p.stream, squad: p.squad, se, ta, ba };
     });
 
     const regP    = byProject.filter(p => p.squad === 'reg-squad');
@@ -2241,6 +2252,7 @@ function computePhaseDemand() {
       byProject,
       totalSE:  byProject.reduce((s, p) => s + p.se,  0),
       totalTA:  byProject.reduce((s, p) => s + p.ta,  0),
+      totalBA:  byProject.reduce((s, p) => s + p.ba,  0),
       regSE:    regP.reduce(   (s, p) => s + p.se,  0),
       regTA:    regP.reduce(   (s, p) => s + p.ta,  0),
       nonregSE: nonregP.reduce((s, p) => s + p.se,  0),
@@ -2468,8 +2480,8 @@ function resExportTSV() {
   if (resSub === 'dvc') {
     const r = buildUtilModel().rows;
     const u = (util, cap) => cap > 0 ? (util === Infinity ? 'over' : Math.round(util)) : '';
-    const header = 'Month\tSE Demand\tSE Capacity\tSE Util %\tTA Demand\tTA Capacity\tTA Util %\tPM Capacity';
-    const lines  = r.map(d => `${d.mo}\t${fmtN(d.seDem)}\t${fmtN(d.seCap)}\t${u(d.seUtil,d.seCap)}\t${fmtN(d.taDem)}\t${fmtN(d.taCap)}\t${u(d.taUtil,d.taCap)}\t${fmtN(d.pmCap)}`);
+    const header = 'Month\tSE Demand\tSE Capacity\tSE Util %\tTA Demand\tTA Capacity\tTA Util %\tBA Demand\tBA Capacity\tBA Util %\tPM Capacity';
+    const lines  = r.map(d => `${d.mo}\t${fmtN(d.seDem)}\t${fmtN(d.seCap)}\t${u(d.seUtil,d.seCap)}\t${fmtN(d.taDem)}\t${fmtN(d.taCap)}\t${u(d.taUtil,d.taCap)}\t${fmtN(d.baDem)}\t${fmtN(d.baCap)}\t${u(d.baUtil,d.baCap)}\t${fmtN(d.pmCap)}`);
     navigator.clipboard.writeText([header, ...lines].join('\n')).then(() =>
       alert('✓ Copied Demand vs Capacity table as TSV — paste into Excel or Google Sheets'));
     return;
@@ -2493,11 +2505,11 @@ function resExportEmail() {
     const numTd  = v => `<td style="padding:5px 10px;text-align:center;font-size:12px;color:#1E293B">${fmtN(v)}</td>`;
     const utilTd = (u, cap) => { const b = utilBand(u, cap > 0); return `<td style="padding:5px 10px;text-align:center;font-size:12px;font-weight:700;color:${b.fg};background:${b.bg}">${pct(u, cap)}</td>`; };
     const th  = t => `<th style="padding:6px 10px;background:#0F2544;color:#fff;font-size:12px;text-align:center">${t}</th>`;
-    const trs = r.map(d => `<tr><td style="padding:5px 10px;font-size:12px;font-weight:600;text-align:center">${d.mo}</td>${numTd(d.seDem)}${numTd(d.seCap)}${utilTd(d.seUtil,d.seCap)}${numTd(d.taDem)}${numTd(d.taCap)}${utilTd(d.taUtil,d.taCap)}${numTd(d.pmCap)}</tr>`).join('');
+    const trs = r.map(d => `<tr><td style="padding:5px 10px;font-size:12px;font-weight:600;text-align:center">${d.mo}</td>${numTd(d.seDem)}${numTd(d.seCap)}${utilTd(d.seUtil,d.seCap)}${numTd(d.taDem)}${numTd(d.taCap)}${utilTd(d.taUtil,d.taCap)}${numTd(d.baDem)}${numTd(d.baCap)}${utilTd(d.baUtil,d.baCap)}${numTd(d.pmCap)}</tr>`).join('');
     const html = `<table style="border-collapse:collapse;font-family:system-ui,sans-serif">
       <thead>
-        <tr><th style="background:#0F2544"></th><th colspan="3" style="padding:5px 10px;background:#0369A1;color:#fff;font-size:11px;text-align:center">Software Engineers</th><th colspan="3" style="padding:5px 10px;background:#D97706;color:#fff;font-size:11px;text-align:center">Test Analysts</th><th style="background:#0F2544"></th></tr>
-        <tr>${['Month','Dem','Cap','Util','Dem','Cap','Util','PM cap'].map(th).join('')}</tr>
+        <tr><th style="background:#0F2544"></th><th colspan="3" style="padding:5px 10px;background:#0369A1;color:#fff;font-size:11px;text-align:center">Software Engineers</th><th colspan="3" style="padding:5px 10px;background:#D97706;color:#fff;font-size:11px;text-align:center">Test Analysts</th><th colspan="3" style="padding:5px 10px;background:#0D9488;color:#fff;font-size:11px;text-align:center">Business Analysts</th><th style="background:#0F2544"></th></tr>
+        <tr>${['Month','Dem','Cap','Util','Dem','Cap','Util','Dem','Cap','Util','PM cap'].map(th).join('')}</tr>
       </thead><tbody>${trs}</tbody></table>`;
     navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) })])
       .then(() => alert('✓ Copied Demand vs Capacity table as rich text — paste into email, Confluence or Word'))
@@ -2562,10 +2574,11 @@ function _rr(ctx, x, y, w, h, r) {
 }
 function _dvcDrawTable(ctx, rows, x0, y0, W, m) {
   const cols = [
-    { k:'mo', t:'Month', w:64, align:'left' },
-    { k:'seDem', t:'Dem', w:62 }, { k:'seCap', t:'Cap', w:62 }, { k:'seUtil', t:'Util', w:78 },
-    { k:'taDem', t:'Dem', w:62 }, { k:'taCap', t:'Cap', w:62 }, { k:'taUtil', t:'Util', w:78 },
-    { k:'pmCap', t:'PM cap', w:78 },
+    { k:'mo', t:'Month', w:52, align:'left' },
+    { k:'seDem', t:'Dem', w:44 }, { k:'seCap', t:'Cap', w:44 }, { k:'seUtil', t:'Util', w:58 },
+    { k:'taDem', t:'Dem', w:44 }, { k:'taCap', t:'Cap', w:44 }, { k:'taUtil', t:'Util', w:58 },
+    { k:'baDem', t:'Dem', w:44 }, { k:'baCap', t:'Cap', w:44 }, { k:'baUtil', t:'Util', w:58 },
+    { k:'pmCap', t:'PM cap', w:56 },
   ];
   const totW = cols.reduce((s, c) => s + c.w, 0), sx = W / totW;
   cols.forEach(c => c.w *= sx);
@@ -2574,6 +2587,7 @@ function _dvcDrawTable(ctx, rows, x0, y0, W, m) {
   ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'center';
   ctx.fillStyle = '#0369A1'; ctx.fillText('SOFTWARE ENGINEERS', (xs[1] + xs[4]) / 2, y0 + m.grpH / 2);
   ctx.fillStyle = '#D97706'; ctx.fillText('TEST ANALYSTS', (xs[4] + xs[7]) / 2, y0 + m.grpH / 2);
+  ctx.fillStyle = '#0D9488'; ctx.fillText('BUSINESS ANALYSTS', (xs[7] + xs[10]) / 2, y0 + m.grpH / 2);
   const hy = y0 + m.grpH + m.headH / 2;
   ctx.fillStyle = '#64748B';
   cols.forEach((c, i) => { ctx.textAlign = c.align === 'left' ? 'left' : 'center'; ctx.fillText(c.t, c.align === 'left' ? xs[i] + 4 : xs[i] + c.w / 2, hy); });
@@ -2585,9 +2599,10 @@ function _dvcDrawTable(ctx, rows, x0, y0, W, m) {
     const cy = ry + m.rowH / 2;
     cols.forEach((c, i) => {
       const cxc = xs[i] + c.w / 2;
-      if (c.k === 'seUtil' || c.k === 'taUtil') {
-        const cap = c.k === 'seUtil' ? r.seCap : r.taCap, u = c.k === 'seUtil' ? r.seUtil : r.taUtil;
-        const b = utilBand(u, cap > 0), bw = Math.min(c.w - 14, 54), bh = 16;
+      if (c.k === 'seUtil' || c.k === 'taUtil' || c.k === 'baUtil') {
+        const cap = c.k === 'seUtil' ? r.seCap : c.k === 'taUtil' ? r.taCap : r.baCap;
+        const u = c.k === 'seUtil' ? r.seUtil : c.k === 'taUtil' ? r.taUtil : r.baUtil;
+        const b = utilBand(u, cap > 0), bw = Math.min(c.w - 8, 48), bh = 16;
         ctx.fillStyle = b.bg; _rr(ctx, cxc - bw / 2, cy - bh / 2, bw, bh, 4); ctx.fill();
         ctx.fillStyle = b.fg; ctx.font = '700 11px system-ui,sans-serif'; ctx.textAlign = 'center';
         ctx.fillText(pct(u, cap), cxc, cy);
@@ -2700,21 +2715,24 @@ function resExportPPT() {
       { text: '', options: { fill: '0F2544' } },
       { text: 'Software Engineers', options: { colspan: 3, fill: '0369A1', color: 'FFFFFF', bold: true } },
       { text: 'Test Analysts', options: { colspan: 3, fill: 'D97706', color: 'FFFFFF', bold: true } },
+      { text: 'Business Analysts', options: { colspan: 3, fill: '0D9488', color: 'FFFFFF', bold: true } },
       { text: '', options: { fill: '0F2544' } }
     ];
-    const sub = ['Month', 'Dem', 'Cap', 'Util', 'Dem', 'Cap', 'Util', 'PM cap'].map(H);
+    const sub = ['Month', 'Dem', 'Cap', 'Util', 'Dem', 'Cap', 'Util', 'Dem', 'Cap', 'Util', 'PM cap'].map(H);
     const body = rows.map(r => {
-      const s = utilBand(r.seUtil, r.seCap > 0), t = utilBand(r.taUtil, r.taCap > 0);
+      const s = utilBand(r.seUtil, r.seCap > 0), t = utilBand(r.taUtil, r.taCap > 0), a = utilBand(r.baUtil, r.baCap > 0);
       return [
         { text: r.mo, options: { bold: true } },
         { text: String(fmtN(r.seDem)) }, { text: String(fmtN(r.seCap)), options: { color: '64748B' } },
         { text: pc(r.seUtil, r.seCap), options: { bold: true, fill: _hx(s.bg), color: _hx(s.fg) } },
         { text: String(fmtN(r.taDem)) }, { text: String(fmtN(r.taCap)), options: { color: '64748B' } },
         { text: pc(r.taUtil, r.taCap), options: { bold: true, fill: _hx(t.bg), color: _hx(t.fg) } },
+        { text: String(fmtN(r.baDem)) }, { text: String(fmtN(r.baCap)), options: { color: '64748B' } },
+        { text: pc(r.baUtil, r.baCap), options: { bold: true, fill: _hx(a.bg), color: _hx(a.fg) } },
         { text: String(fmtN(r.pmCap)), options: { color: '64748B' } }
       ];
     });
-    _svgPng(svg, chart => _pptExport({ title: 'Resource Demand vs Capacity', subtitle: 'SE & TA demand matched to Work Order capacity · May–Dec 2026', chart, tableRows: [grp, sub, ...body], tableOpts: { colW: [1.3, 1.4, 1.4, 1.7, 1.4, 1.4, 1.7, 1.6] }, fileName: 'Demand_vs_Capacity.pptx' }));
+    _svgPng(svg, chart => _pptExport({ title: 'Resource Demand vs Capacity', subtitle: 'SE, TA & BA demand matched to Work Order capacity · May–Dec 2026', chart, tableRows: [grp, sub, ...body], tableOpts: { colW: [1.0, 1.0, 1.0, 1.15, 1.0, 1.0, 1.15, 1.0, 1.0, 1.15, 1.0] }, fileName: 'Demand_vs_Capacity.pptx' }));
     return;
   }
   const data = _getResDemands(), isRole = resSub === 'role';
@@ -2749,9 +2767,10 @@ function dashExportPPT() {
   const head = ['Pool', ...GCOLS].map(H);
   const seRow = [{ text: 'SE', options: { bold: true, color: '0369A1' } }, ...rows.map(r => { const b = utilBand(r.seUtil, r.seCap > 0); return { text: pc(r.seUtil, r.seCap), options: { fill: _hx(b.bg), color: _hx(b.fg), bold: true } }; })];
   const taRow = [{ text: 'TA', options: { bold: true, color: 'D97706' } }, ...rows.map(r => { const b = utilBand(r.taUtil, r.taCap > 0); return { text: pc(r.taUtil, r.taCap), options: { fill: _hx(b.bg), color: _hx(b.fg), bold: true } }; })];
+  const baRow = [{ text: 'BA', options: { bold: true, color: '0D9488' } }, ...rows.map(r => { const b = utilBand(r.baUtil, r.baCap > 0); return { text: pc(r.baUtil, r.baCap), options: { fill: _hx(b.bg), color: _hx(b.fg), bold: true } }; })];
   const pmRow = [{ text: 'PM', options: { bold: true, color: '7C3AED' } }, ...cap.map(c => ({ text: String(fmtN(c.pm)), options: { fill: 'F1EDFB', color: '6D28D9' } }))];
   const kpiLine = `Avg utilisation: ${kpi.avgUtil}%     ·     Months over capacity: ${kpi.monthsOver}     ·     Peak crunch: ${kpi.peak.pct < 0 ? '—' : kpi.peak.mo + ' ' + kpi.peak.pct + '%'}     ·     Idle / bench: ${kpi.bench} FTE-mo`;
-  _svgPng(document.querySelector('#dashboardView svg'), chart => _pptExport({ title: 'Resource Utilisation — Portfolio', subtitle: 'Demand from project phases vs committed Work Order capacity · May–Dec 2026', kpiLine, chart, tableRows: [head, seRow, taRow, pmRow], fileName: 'Resource_Utilisation_Dashboard.pptx' }));
+  _svgPng(document.querySelector('#dashboardView svg'), chart => _pptExport({ title: 'Resource Utilisation — Portfolio', subtitle: 'Demand from project phases vs committed Work Order capacity · May–Dec 2026', kpiLine, chart, tableRows: [head, seRow, taRow, baRow, pmRow], fileName: 'Resource_Utilisation_Dashboard.pptx' }));
 }
 
 // ─── Phase vertical reorder — drag handle to reorder phases within a project ──
@@ -2911,19 +2930,22 @@ document.addEventListener('keydown', e => {
 const TSZ_COLORS  = { S:'#16A34A', M:'#0369A1', L:'#7C3AED', C:'#DC2626' };
 const TSZ_LABELS  = { S:'Small', M:'Medium', L:'Large', C:'Complex' };
 
-// Phase type weights — how SE and TA are distributed across phase types
+// Phase type weights — how SE, TA and BA are distributed across phase types
 const PHASE_SE_W  = { sd:1.0, dev:1.0, sit:0.4, iqa:0.3, uat:0.2, golive:0.4, planning:1.0, review:0.3, custom:0.7 };
 const PHASE_TA_W  = { sd:0.0, dev:0.1, sit:0.8, iqa:0.9, uat:0.9, golive:0.3, planning:0.0, review:0.5, custom:0.5 };
+const PHASE_BA_W  = { sd:1.0, dev:0.3, sit:0.2, iqa:0.2, uat:0.4, golive:0.2, planning:1.0, review:0.6, custom:0.4 };
 
 let sizingConfig = JSON.parse(localStorage.getItem('aar_sizing') || 'null') || {
   increment: 25,   // % added per sub-level: X1 = base×1.25, X2 = base×1.50, X3 = base×1.75
   bases: {
-    S: { se: 1,   ta: 0.5 },
-    M: { se: 2,   ta: 1   },
-    L: { se: 4,   ta: 2   },
-    C: { se: 6,   ta: 3   },
+    S: { se: 1,   ta: 0.5, ba: 0.5 },
+    M: { se: 2,   ta: 1,   ba: 1   },
+    L: { se: 4,   ta: 2,   ba: 1.5 },
+    C: { se: 6,   ta: 3,   ba: 2   },
   }
 };
+// Migration: backfill BA base on sizing configs that predate the BA role
+{ const _baDef = { S:0.5, M:1, L:1.5, C:2 }; Object.keys(sizingConfig.bases || {}).forEach(k => { if (sizingConfig.bases[k].ba == null) sizingConfig.bases[k].ba = _baDef[k] != null ? _baDef[k] : 0; }); }
 function saveSizingConfig() { localStorage.setItem('aar_sizing', JSON.stringify(sizingConfig)); pushCloud(); }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2932,12 +2954,12 @@ function saveSizingConfig() { localStorage.setItem('aar_sizing', JSON.stringify(
 
 // ── Work Order ledger: time-bound capacity by pool (SE / TA / PM) ────────────
 const WO_DEFAULTS = [
-  { id:1, wo:'WO-2041', area:'Core platform — retainer',  se:5, ta:3, pm:2, start:'2026-05', end:'2026-12', projects:[8,9] },
-  { id:2, wo:'WO-2055', area:'Regulatory delivery SOW',    se:4, ta:3, pm:1, start:'2026-05', end:'2026-08', projects:[1,2,3,4,5,6] },
-  { id:3, wo:'WO-2068', area:'GPS / Non-Reg uplift',       se:3, ta:2, pm:1, start:'2026-07', end:'2026-12', projects:[11,14,15,16,17,18] },
+  { id:1, wo:'WO-2041', area:'Core platform — retainer',  se:5, ta:3, ba:2, pm:2, start:'2026-05', end:'2026-12', projects:[8,9] },
+  { id:2, wo:'WO-2055', area:'Regulatory delivery SOW',    se:4, ta:3, ba:2, pm:1, start:'2026-05', end:'2026-08', projects:[1,2,3,4,5,6] },
+  { id:3, wo:'WO-2068', area:'GPS / Non-Reg uplift',       se:3, ta:2, ba:1, pm:1, start:'2026-07', end:'2026-12', projects:[11,14,15,16,17,18] },
 ];
 let workOrders = JSON.parse(localStorage.getItem('aar_wos') || 'null') || WO_DEFAULTS.map(w => ({ ...w, projects:[...w.projects] }));
-workOrders.forEach(w => { if (!Array.isArray(w.projects)) w.projects = []; });
+workOrders.forEach(w => { if (!Array.isArray(w.projects)) w.projects = []; if (w.ba == null) w.ba = 0; });
 let nextWoId    = Math.max(0, ...workOrders.map(w => w.id || 0)) + 1;
 let woAllocOpen = null;  // index of WO whose project-allocation panel is open
 function persistWOs() { localStorage.setItem('aar_wos', JSON.stringify(workOrders)); pushCloud(); }
@@ -2954,12 +2976,12 @@ function woActiveInMonth(wo, mi) {
   return s <= me && e >= ms;
 }
 
-/** Pooled available capacity per month → [{se,ta,pm}, …] across GCOLS. */
+/** Pooled available capacity per month → [{se,ta,ba,pm}, …] across GCOLS. */
 function computeCapacity() {
   return GCOLS.map((_, mi) => {
-    let se = 0, ta = 0, pm = 0;
-    workOrders.forEach(w => { if (woActiveInMonth(w, mi)) { se += (+w.se || 0); ta += (+w.ta || 0); pm += (+w.pm || 0); } });
-    return { se, ta, pm };
+    let se = 0, ta = 0, ba = 0, pm = 0;
+    workOrders.forEach(w => { if (woActiveInMonth(w, mi)) { se += (+w.se || 0); ta += (+w.ta || 0); ba += (+w.ba || 0); pm += (+w.pm || 0); } });
+    return { se, ta, ba, pm };
   });
 }
 
@@ -2977,25 +2999,27 @@ function buildUtilModel() {
   const pd  = computePhaseDemand();
   const cap = computeCapacity();
   const rows = GCOLS.map((mo, i) => {
-    const seDem = +pd[i].totalSE.toFixed(1), taDem = +pd[i].totalTA.toFixed(1);
-    const seCap = cap[i].se, taCap = cap[i].ta, pmCap = cap[i].pm;
+    const seDem = +pd[i].totalSE.toFixed(1), taDem = +pd[i].totalTA.toFixed(1), baDem = +pd[i].totalBA.toFixed(1);
+    const seCap = cap[i].se, taCap = cap[i].ta, baCap = cap[i].ba, pmCap = cap[i].pm;
     const seUtil = seCap > 0 ? (seDem / seCap) * 100 : (seDem > 0 ? Infinity : 0);
     const taUtil = taCap > 0 ? (taDem / taCap) * 100 : (taDem > 0 ? Infinity : 0);
-    return { mo, seDem, taDem, seCap, taCap, pmCap, seUtil, taUtil,
-             over: (seDem > seCap) || (taDem > taCap) };
+    const baUtil = baCap > 0 ? (baDem / baCap) * 100 : (baDem > 0 ? Infinity : 0);
+    return { mo, seDem, taDem, baDem, seCap, taCap, baCap, pmCap, seUtil, taUtil, baUtil,
+             over: (seDem > seCap) || (taDem > taCap) || (baDem > baCap) };
   });
   // KPIs
   const utilVals = [];
-  rows.forEach(r => { if (r.seCap > 0) utilVals.push(Math.min(r.seUtil, 999)); if (r.taCap > 0) utilVals.push(Math.min(r.taUtil, 999)); });
+  rows.forEach(r => { if (r.seCap > 0) utilVals.push(Math.min(r.seUtil, 999)); if (r.taCap > 0) utilVals.push(Math.min(r.taUtil, 999)); if (r.baCap > 0) utilVals.push(Math.min(r.baUtil, 999)); });
   const avgUtil    = utilVals.length ? Math.round(utilVals.reduce((a,b)=>a+b,0) / utilVals.length) : 0;
   const monthsOver = rows.filter(r => r.over).length;
   let peak = { pct:-1, mo:'—', role:'' };
   rows.forEach(r => {
     if (r.seCap > 0 && r.seUtil > peak.pct) peak = { pct:Math.round(r.seUtil), mo:r.mo, role:'SE' };
     if (r.taCap > 0 && r.taUtil > peak.pct) peak = { pct:Math.round(r.taUtil), mo:r.mo, role:'TA' };
+    if (r.baCap > 0 && r.baUtil > peak.pct) peak = { pct:Math.round(r.baUtil), mo:r.mo, role:'BA' };
   });
   let bench = 0;
-  rows.forEach(r => { bench += Math.max(0, r.seCap - r.seDem) + Math.max(0, r.taCap - r.taDem); });
+  rows.forEach(r => { bench += Math.max(0, r.seCap - r.seDem) + Math.max(0, r.taCap - r.taDem) + Math.max(0, r.baCap - r.baDem); });
   return { rows, kpi:{ avgUtil, monthsOver, peak, bench:+bench.toFixed(1) } };
 }
 
@@ -3004,12 +3028,13 @@ function refreshCapacityViews() {
   if (document.getElementById('resView').style.display !== 'none' && resSub === 'dvc') renderDvC();
 }
 
-// ── Grouped SE/TA demand bars + per-role capacity ticks ──────────────────────
+// ── Grouped SE/TA/BA demand bars + per-role capacity ticks ───────────────────
+const ROLE_COL = { SE:'#0369A1', TA:'#D97706', BA:'#0D9488' };
 function buildDvcSVG(rows) {
   const W=720, H=250, PL=34, PB=42, PTp=22;
   const chartW=W-PL-8, chartH=H-PB-PTp, n=rows.length, slotW=chartW/n;
-  const barW=Math.min(24, slotW*0.28), gap=6, offset=(slotW-barW*2-gap)/2;
-  const maxVal=Math.max(1, ...rows.map(r=>Math.max(r.seDem,r.taDem,r.seCap,r.taCap)));
+  const barW=Math.min(16, slotW*0.2), gap=4, offset=(slotW-barW*3-gap*2)/2;
+  const maxVal=Math.max(1, ...rows.map(r=>Math.max(r.seDem,r.taDem,r.baDem,r.seCap,r.taCap,r.baCap)));
   const step=maxVal<=5?1:maxVal<=10?2:maxVal<=20?4:5;
   const yOf=v=>PTp+chartH-(v/maxVal)*chartH;
   let els='';
@@ -3018,16 +3043,16 @@ function buildDvcSVG(rows) {
     els+=`<text x="${PL-4}" y="${(+y+3).toFixed(1)}" text-anchor="end" fill="#CBD5E1" font-size="9" font-family="system-ui,sans-serif">${t}</text>`;}
   rows.forEach((r,i)=>{
     const x0=PL+i*slotW+offset;
-    [['SE',r.seDem,r.seCap,'#0369A1'],['TA',r.taDem,r.taCap,'#D97706']].forEach((arr,j)=>{
+    [['SE',r.seDem,r.seCap,ROLE_COL.SE],['TA',r.taDem,r.taCap,ROLE_COL.TA],['BA',r.baDem,r.baCap,ROLE_COL.BA]].forEach((arr,j)=>{
       const [role,dem,cp,col]=arr; const x=x0+j*(barW+gap);
       const over=dem>cp; const h=(dem/maxVal)*chartH; const y=PTp+chartH-h;
-      els+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" fill="${over?'#DC2626':col}" rx="2" opacity=".9"><title>${role} demand ${fmtN(dem)} vs capacity ${fmtN(cp)}</title></rect>`;
-      const cy=yOf(cp);
-      els+=`<line x1="${(x-1.5).toFixed(1)}" y1="${cy.toFixed(1)}" x2="${(x+barW+1.5).toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${col}" stroke-width="2" stroke-dasharray="3,2"><title>${role} capacity ${fmtN(cp)}</title></line>`;
-      const lbl=over?`▲${fmtN(+(dem-cp).toFixed(1))}`:fmtN(dem);
-      els+=`<text x="${(x+barW/2).toFixed(1)}" y="${(Math.min(y,cy)-3).toFixed(1)}" text-anchor="middle" fill="${over?'#DC2626':'#374151'}" font-size="8" font-weight="700" font-family="system-ui,sans-serif">${lbl}</text>`;
+      if(dem>0) els+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" fill="${over?'#DC2626':col}" rx="2" opacity=".9"><title>${role} demand ${fmtN(dem)} vs capacity ${fmtN(cp)}</title></rect>`;
+      if(cp>0){ const cy=yOf(cp);
+        els+=`<line x1="${(x-1).toFixed(1)}" y1="${cy.toFixed(1)}" x2="${(x+barW+1).toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${col}" stroke-width="2" stroke-dasharray="3,2"><title>${role} capacity ${fmtN(cp)}</title></line>`; }
+      if(dem>0){ const lbl=over?`▲${fmtN(+(dem-cp).toFixed(1))}`:fmtN(dem);
+        els+=`<text x="${(x+barW/2).toFixed(1)}" y="${(Math.min(y,cp>0?yOf(cp):y)-3).toFixed(1)}" text-anchor="middle" fill="${over?'#DC2626':'#374151'}" font-size="7.5" font-weight="700" font-family="system-ui,sans-serif">${lbl}</text>`; }
     });
-    els+=`<text x="${(x0+barW+gap/2).toFixed(1)}" y="${H-PB+16}" text-anchor="middle" fill="#64748B" font-size="10" font-weight="600" font-family="system-ui,sans-serif">${rows[i].mo}</text>`;
+    els+=`<text x="${(x0+(barW*3+gap*2)/2).toFixed(1)}" y="${H-PB+16}" text-anchor="middle" fill="#64748B" font-size="10" font-weight="600" font-family="system-ui,sans-serif">${rows[i].mo}</text>`;
   });
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:760px;display:block;margin:0 auto">${els}</svg>`;
 }
@@ -3044,6 +3069,7 @@ function dvcTable(rows) {
     <td style="font-weight:600">${r.mo}</td>
     ${cell(r.seDem, r.seCap, r.seUtil)}
     ${cell(r.taDem, r.taCap, r.taUtil)}
+    ${cell(r.baDem, r.baCap, r.baUtil)}
     <td style="text-align:center;color:#64748B">${fmtN(r.pmCap)}</td>
   </tr>`).join('');
   return `<table class="dtable" style="margin-top:18px">
@@ -3052,9 +3078,11 @@ function dvcTable(rows) {
         <th rowspan="2" style="vertical-align:bottom">Month</th>
         <th colspan="3" style="text-align:center;color:#0369A1;border-bottom:1px solid #E2E8F0">Software Engineers</th>
         <th colspan="3" style="text-align:center;color:#D97706;border-bottom:1px solid #E2E8F0">Test Analysts</th>
+        <th colspan="3" style="text-align:center;color:#0D9488;border-bottom:1px solid #E2E8F0">Business Analysts</th>
         <th rowspan="2" style="text-align:center;vertical-align:bottom;color:#7C3AED">PM cap</th>
       </tr>
       <tr style="font-size:10px;color:#94A3B8">
+        <th style="text-align:center">Dem</th><th style="text-align:center">Cap</th><th style="text-align:center">Util</th>
         <th style="text-align:center">Dem</th><th style="text-align:center">Cap</th><th style="text-align:center">Util</th>
         <th style="text-align:center">Dem</th><th style="text-align:center">Cap</th><th style="text-align:center">Util</th>
       </tr>
@@ -3063,12 +3091,87 @@ function dvcTable(rows) {
   </table>`;
 }
 
+/** Demand vs capacity split by project stream.
+ *  Demand: SE+TA+BA FTE of each project, bucketed by its stream.
+ *  Capacity: each Work Order's SE+TA+BA, attributed to the streams of the projects
+ *  it funds, split proportionally by project count when a WO spans streams.
+ *  WO capacity with no allocated projects is reported as "unallocated". */
+function computeStreamModel() {
+  const pd = computePhaseDemand();
+  const streams = ['reg', 'standalone', 'nonreg', 'gps', 'bau'];
+  const rows = GCOLS.map((mo, mi) => {
+    const dem = {}, cap = {}; streams.forEach(s => { dem[s] = 0; cap[s] = 0; });
+    pd[mi].byProject.forEach(p => { if (dem[p.stream] != null) dem[p.stream] += (p.se + p.ta + p.ba); });
+    let unalloc = 0;
+    workOrders.forEach(w => {
+      if (!woActiveInMonth(w, mi)) return;
+      const fte = (+w.se || 0) + (+w.ta || 0) + (+w.ba || 0);
+      if (fte <= 0) return;
+      const funded = (w.projects || []).map(id => projects.find(p => p.id === id)).filter(Boolean);
+      if (!funded.length) { unalloc += fte; return; }
+      const counts = {}; funded.forEach(p => { counts[p.stream] = (counts[p.stream] || 0) + 1; });
+      Object.keys(counts).forEach(s => { if (cap[s] != null) cap[s] += fte * counts[s] / funded.length; });
+    });
+    streams.forEach(s => { dem[s] = +dem[s].toFixed(2); cap[s] = +cap[s].toFixed(2); });
+    return { mo, dem, cap, unalloc: +unalloc.toFixed(2) };
+  });
+  const shown = streams.filter(s => rows.some(r => r.dem[s] > 0 || r.cap[s] > 0));
+  return { streams, shown, rows };
+}
+function _streamBand(d, c) {
+  if (c <= 0) return d > 0 ? { bg:'#FECACA', fg:'#991B1B', txt:'∞' } : { bg:'#F1F5F9', fg:'#94A3B8', txt:'—' };
+  const b = utilBand(d / c * 100, true);
+  return { bg: b.bg, fg: b.fg, txt: Math.round(d / c * 100) + '%' };
+}
+function _streamBreakdownInner(detailed) {
+  const { shown, rows } = computeStreamModel();
+  const monthHead = GCOLS.map(m => `<th style="font-size:11px;color:#64748B;font-weight:600;text-align:center;padding-bottom:6px">${m}</th>`).join('');
+  const heat = shown.map(s => `<tr>
+      <td style="font-weight:700;color:${SCOL[s]};font-size:12px;white-space:nowrap;padding-right:8px">${SLBL[s]}</td>
+      ${rows.map(r => { const b = _streamBand(r.dem[s], r.cap[s]); return `<td style="padding:3px"><div title="demand ${fmtN(r.dem[s])} / capacity ${fmtN(r.cap[s])} FTE" style="background:${b.bg};color:${b.fg};font-weight:700;font-size:12px;text-align:center;padding:8px 0;border-radius:5px">${b.txt}</div></td>`; }).join('')}
+    </tr>`).join('');
+  const unalloc = rows.reduce((s, r) => s + r.unalloc, 0);
+  const note = unalloc > 0
+    ? `<div style="margin-top:10px;font-size:11px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:7px 10px">${fmtN(+unalloc.toFixed(1))} FTE-months of Work Order capacity isn't allocated to any project, so it's not attributed to a stream. Allocate projects in ⚙ Settings.</div>`
+    : '';
+  let summary = '';
+  if (detailed) {
+    const sumRows = shown.map(s => {
+      let td = 0, tc = 0, peak = 0;
+      rows.forEach(r => { td += r.dem[s]; tc += r.cap[s]; const u = r.cap[s] > 0 ? r.dem[s] / r.cap[s] * 100 : (r.dem[s] > 0 ? Infinity : 0); peak = Math.max(peak, u); });
+      const b = peak === Infinity ? { bg:'#FECACA', fg:'#991B1B' } : utilBand(peak, true);
+      const pk = peak === Infinity ? '∞' : Math.round(peak) + '%';
+      return `<tr>
+        <td style="font-weight:600;color:${SCOL[s]}">${SLBL[s]}</td>
+        <td style="text-align:center;font-weight:700;color:#0F2544">${fmtN(+td.toFixed(1))}</td>
+        <td style="text-align:center;color:#64748B">${fmtN(+tc.toFixed(1))}</td>
+        <td style="text-align:center"><span style="background:${b.bg};color:${b.fg};font-weight:700;padding:2px 8px;border-radius:4px;font-size:11px">${pk}</span></td>
+      </tr>`;
+    }).join('');
+    summary = `<table class="dtable" style="margin-top:14px;max-width:540px">
+      <thead><tr><th>Stream</th><th style="text-align:center">Demand FTE-mo</th><th style="text-align:center">Capacity FTE-mo</th><th style="text-align:center">Peak util</th></tr></thead>
+      <tbody>${sumRows}</tbody></table>`;
+  }
+  return `
+    <div class="res-card-title">Demand vs capacity by project stream
+      <span class="res-hint">Supply attributed from Work Order → project allocations · cell = demand ÷ capacity (SE + TA FTE)</span>
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:560px">
+      <thead><tr><th style="width:96px"></th>${monthHead}</tr></thead>
+      <tbody>${heat}</tbody>
+    </table></div>
+    ${summary}
+    ${note}`;
+}
+
 function renderDvC() {
   const { rows } = buildUtilModel();
-  document.getElementById('resChartWrap').innerHTML = buildDvcSVG(rows) + dvcTable(rows);
+  document.getElementById('resChartWrap').innerHTML = buildDvcSVG(rows) + dvcTable(rows)
+    + `<div style="margin-top:24px;border-top:1px solid #E2E8F0;padding-top:18px">${_streamBreakdownInner(true)}</div>`;
   document.getElementById('resLegend').innerHTML = `
     <span><span class="res-leg-dot" style="background:#0369A1"></span>SE demand</span>
     <span><span class="res-leg-dot" style="background:#D97706"></span>TA demand</span>
+    <span><span class="res-leg-dot" style="background:#0D9488"></span>BA demand</span>
     <span><span class="res-leg-dot" style="background:#DC2626"></span>Over capacity</span>
     <span style="color:#94A3B8;font-size:10px">– – dashed tick = capacity for that role · capacity comes from Work Orders in ⚙ Settings · PM assumed sufficient</span>`;
 }
@@ -3105,15 +3208,15 @@ function renderDashboardView() {
     </div>
 
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px">
-      ${kpiCard('Avg utilisation', kpi.avgUtil + '%', 'SE &amp; TA, across active months', kpi.avgUtil > 105 ? '#DC2626' : (kpi.avgUtil < 70 ? '#1E40AF' : '#0F2544'))}
-      ${kpiCard('Months over capacity', kpi.monthsOver, 'SE or TA demand exceeds supply', kpi.monthsOver > 0 ? '#DC2626' : '#16A34A')}
+      ${kpiCard('Avg utilisation', kpi.avgUtil + '%', 'SE, TA &amp; BA, across active months', kpi.avgUtil > 105 ? '#DC2626' : (kpi.avgUtil < 70 ? '#1E40AF' : '#0F2544'))}
+      ${kpiCard('Months over capacity', kpi.monthsOver, 'SE, TA or BA demand exceeds supply', kpi.monthsOver > 0 ? '#DC2626' : '#16A34A')}
       ${kpiCard('Peak crunch', (kpi.peak.pct < 0 ? '—' : kpi.peak.mo + ' · ' + kpi.peak.pct + '%'), (kpi.peak.role ? kpi.peak.role + ' is the tightest pool' : 'No demand yet'), '#0F2544')}
-      ${kpiCard('Idle / bench', kpi.bench + ' FTE-mo', 'Unused SE + TA capacity', '#0369A1')}
+      ${kpiCard('Idle / bench', kpi.bench + ' FTE-mo', 'Unused SE + TA + BA capacity', '#0369A1')}
     </div>
 
     <div class="res-card">
       <div class="res-card-title">Utilisation heatmap
-        <span class="res-hint">SE &amp; TA shown as demand ÷ capacity · PM shown as allocated FTE (assumed sufficient)</span>
+        <span class="res-hint">SE, TA &amp; BA shown as demand ÷ capacity · PM shown as allocated FTE (assumed sufficient)</span>
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:11px;color:#64748B">
         <span><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#DBEAFE;margin-right:4px;vertical-align:middle"></span>Under &lt;70%</span>
@@ -3126,28 +3229,31 @@ function renderDashboardView() {
         <tbody>
           <tr><td style="font-weight:700;color:#0369A1;font-size:12px">SE</td>${rows.map(r=>heatCell(r.seDem,r.seCap,r.seUtil)).join('')}</tr>
           <tr><td style="font-weight:700;color:#D97706;font-size:12px">TA</td>${rows.map(r=>heatCell(r.taDem,r.taCap,r.taUtil)).join('')}</tr>
+          <tr><td style="font-weight:700;color:#0D9488;font-size:12px">BA</td>${rows.map(r=>heatCell(r.baDem,r.baCap,r.baUtil)).join('')}</tr>
           <tr><td style="font-weight:700;color:#7C3AED;font-size:12px">PM</td>${cap.map(c=>pmCell(c.pm)).join('')}</tr>
         </tbody>
       </table>
     </div>
 
     <div class="res-card">
-      <div class="res-card-title">SE / TA demand vs capacity</div>
+      <div class="res-card-title">SE / TA / BA demand vs capacity</div>
       ${buildDvcSVG(rows)}
-    </div>`;
+    </div>
+
+    <div class="res-card">${_streamBreakdownInner(false)}</div>`;
   document.getElementById('dashboardView').innerHTML = html;
 }
 
 // ── Settings: Work Order ledger + T-shirt sizing config ──────────────────────
 function woEdit(i, field, val) {
   if (!workOrders[i]) return;
-  workOrders[i][field] = (field === 'se' || field === 'ta' || field === 'pm') ? (+val || 0) : val;
+  workOrders[i][field] = (field === 'se' || field === 'ta' || field === 'ba' || field === 'pm') ? (+val || 0) : val;
   persistWOs();
   const strip = document.getElementById('woCapStrip');
   if (strip) strip.innerHTML = woCapStripHTML();
 }
 function woAdd() {
-  workOrders.push({ id: nextWoId++, wo:'', area:'', se:0, ta:0, pm:0, start:'2026-05', end:'2026-12', projects:[] });
+  workOrders.push({ id: nextWoId++, wo:'', area:'', se:0, ta:0, ba:0, pm:0, start:'2026-05', end:'2026-12', projects:[] });
   persistWOs(); renderSettingsView();
 }
 function woDel(i) {
@@ -3175,19 +3281,20 @@ function computeWoRollup() {
   const pd = computePhaseDemand();
   return workOrders.map(w => {
     const ids = new Set(w.projects || []);
-    let peakSe = 0, peakTa = 0, overMonths = 0;
+    let peakSe = 0, peakTa = 0, peakBa = 0, overMonths = 0;
     const monthly = GCOLS.map((mo, mi) => {
-      let se = 0, ta = 0;
-      pd[mi].byProject.forEach(p => { if (ids.has(p.id)) { se += p.se; ta += p.ta; } });
+      let se = 0, ta = 0, ba = 0;
+      pd[mi].byProject.forEach(p => { if (ids.has(p.id)) { se += p.se; ta += p.ta; ba += p.ba; } });
       const active = woActiveInMonth(w, mi);
-      const seCap = active ? (+w.se || 0) : 0, taCap = active ? (+w.ta || 0) : 0;
+      const seCap = active ? (+w.se || 0) : 0, taCap = active ? (+w.ta || 0) : 0, baCap = active ? (+w.ba || 0) : 0;
       const seU = seCap > 0 ? se / seCap * 100 : (se > 0 ? Infinity : 0);
       const taU = taCap > 0 ? ta / taCap * 100 : (ta > 0 ? Infinity : 0);
-      if (se > seCap || ta > taCap) overMonths++;
-      peakSe = Math.max(peakSe, seU); peakTa = Math.max(peakTa, taU);
-      return { mo, se:+se.toFixed(1), ta:+ta.toFixed(1), seCap, taCap };
+      const baU = baCap > 0 ? ba / baCap * 100 : (ba > 0 ? Infinity : 0);
+      if (se > seCap || ta > taCap || ba > baCap) overMonths++;
+      peakSe = Math.max(peakSe, seU); peakTa = Math.max(peakTa, taU); peakBa = Math.max(peakBa, baU);
+      return { mo, se:+se.toFixed(1), ta:+ta.toFixed(1), ba:+ba.toFixed(1), seCap, taCap, baCap };
     });
-    return { w, projCount: ids.size, monthly, peakSe, peakTa, overMonths };
+    return { w, projCount: ids.size, monthly, peakSe, peakTa, peakBa, overMonths };
   });
 }
 function woCapStripHTML() {
@@ -3195,7 +3302,7 @@ function woCapStripHTML() {
   const c = (lbl, key, col) => `<tr><td style="font-weight:700;color:${col};font-size:11px;padding-right:10px">${lbl}</td>${cap.map(x=>`<td style="text-align:center;font-size:12px;color:#0F2544;padding:3px 0">${fmtN(x[key])}</td>`).join('')}</tr>`;
   return `<table style="width:100%;border-collapse:collapse;margin-top:4px">
     <thead><tr><th style="width:42px"></th>${GCOLS.map(m=>`<th style="font-size:10px;color:#94A3B8;font-weight:600;text-align:center">${m}</th>`).join('')}</tr></thead>
-    <tbody>${c('SE','se','#0369A1')}${c('TA','ta','#D97706')}${c('PM','pm','#7C3AED')}</tbody>
+    <tbody>${c('SE','se','#0369A1')}${c('TA','ta','#D97706')}${c('BA','ba','#0D9488')}${c('PM','pm','#7C3AED')}</tbody>
   </table>`;
 }
 function renderSettingsView() {
@@ -3230,6 +3337,7 @@ function renderSettingsView() {
         <div style="flex:1;min-width:150px"><div style="font-size:9px;color:#94A3B8;font-weight:700;margin-bottom:2px">Commercial area</div><input style="${inp}" value="${esc(w.area)}" oninput="woEdit(${i},'area',this.value)" placeholder="Commercial area"></div>
         <div style="text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.se}" oninput="woEdit(${i},'se',this.value)"><div style="font-size:9px;color:#0369A1;font-weight:700;margin-top:2px">SE</div></div>
         <div style="text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.ta}" oninput="woEdit(${i},'ta',this.value)"><div style="font-size:9px;color:#D97706;font-weight:700;margin-top:2px">TA</div></div>
+        <div style="text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.ba}" oninput="woEdit(${i},'ba',this.value)"><div style="font-size:9px;color:#0D9488;font-weight:700;margin-top:2px">BA</div></div>
         <div style="text-align:center"><input type="number" min="0" step="0.5" style="${numInp}" value="${w.pm}" oninput="woEdit(${i},'pm',this.value)"><div style="font-size:9px;color:#7C3AED;font-weight:700;margin-top:2px">PM</div></div>
         <div style="text-align:center"><input type="month" style="${inp};width:124px" value="${w.start||''}" oninput="woEdit(${i},'start',this.value)"><div style="font-size:9px;color:#94A3B8;margin-top:2px">start</div></div>
         <div style="text-align:center"><input type="month" style="${inp};width:124px" value="${w.end||''}" oninput="woEdit(${i},'end',this.value)"><div style="font-size:9px;color:#94A3B8;margin-top:2px">end</div></div>
@@ -3258,6 +3366,7 @@ function renderSettingsView() {
     <td style="text-align:center;font-weight:600">${r.projCount}</td>
     <td style="text-align:center">${pbadge(r.peakSe, r.projCount > 0)}</td>
     <td style="text-align:center">${pbadge(r.peakTa, r.projCount > 0)}</td>
+    <td style="text-align:center">${pbadge(r.peakBa, r.projCount > 0)}</td>
     <td style="text-align:center;font-weight:700;color:${r.overMonths > 0 ? '#DC2626' : '#16A34A'}">${r.overMonths > 0 ? '▲ ' + r.overMonths + ' mo' : 'OK'}</td>
   </tr>`).join('');
   const unalloc = projects.filter(p => (p.resources > 0 || (p.phases || []).some(ph => ph.startDate)) && !woOfProject(p.id));
@@ -3272,9 +3381,9 @@ function renderSettingsView() {
       <table class="dtable">
         <thead><tr>
           <th>WO #</th><th>Commercial area</th><th style="text-align:center">Projects</th>
-          <th style="text-align:center;color:#0369A1">SE peak</th><th style="text-align:center;color:#D97706">TA peak</th><th style="text-align:center">Status</th>
+          <th style="text-align:center;color:#0369A1">SE peak</th><th style="text-align:center;color:#D97706">TA peak</th><th style="text-align:center;color:#0D9488">BA peak</th><th style="text-align:center">Status</th>
         </tr></thead>
-        <tbody>${rollRows || `<tr><td colspan="6" style="text-align:center;color:#94A3B8;padding:12px">No work orders.</td></tr>`}</tbody>
+        <tbody>${rollRows || `<tr><td colspan="7" style="text-align:center;color:#94A3B8;padding:12px">No work orders.</td></tr>`}</tbody>
       </table>
       ${unallocNote}
     </div>`;
@@ -3283,7 +3392,7 @@ function renderSettingsView() {
   const szConfig = `
     <div class="res-card">
       <div class="res-card-title">👕 T-shirt sizing weights
-        <span class="res-hint">Base SE / TA FTEs per size and the % uplift per sub-level — drives demand on the timeline</span>
+        <span class="res-hint">Base SE / TA / BA FTEs per size and the % uplift per sub-level — drives demand on the timeline</span>
       </div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
         <div>
@@ -3295,6 +3404,7 @@ function renderSettingsView() {
           <div style="display:flex;gap:8px">
             <div style="text-align:center"><input type="number" min="0" max="20" step="0.5" value="${sizingConfig.bases[s].se}" style="${numInp}" oninput="sizingConfig.bases['${s}'].se=+this.value;saveSizingConfig()"><div style="font-size:9px;color:#0369A1;font-weight:700;margin-top:2px">SE</div></div>
             <div style="text-align:center"><input type="number" min="0" max="20" step="0.5" value="${sizingConfig.bases[s].ta}" style="${numInp}" oninput="sizingConfig.bases['${s}'].ta=+this.value;saveSizingConfig()"><div style="font-size:9px;color:#D97706;font-weight:700;margin-top:2px">TA</div></div>
+            <div style="text-align:center"><input type="number" min="0" max="20" step="0.5" value="${sizingConfig.bases[s].ba}" style="${numInp}" oninput="sizingConfig.bases['${s}'].ba=+this.value;saveSizingConfig()"><div style="font-size:9px;color:#0D9488;font-weight:700;margin-top:2px">BA</div></div>
           </div>
         </div>`).join('')}
       </div>
@@ -3327,7 +3437,7 @@ function renderSettingsView() {
  *  Formula: base × (1 + level × increment/100)
  *  So M2 with 25% increment = 2 × 1.50 = 3.0 SE, 1 × 1.50 = 1.5 TA  */
 function getSizeFTE(sizeCode) {
-  if (!sizeCode) return { se: 0, ta: 0 };
+  if (!sizeCode) return { se: 0, ta: 0, ba: 0 };
   const letter = sizeCode[0];
   const level  = parseInt(sizeCode[1]);
   const base   = sizingConfig.bases[letter];
@@ -3335,6 +3445,7 @@ function getSizeFTE(sizeCode) {
   return {
     se: +( base.se * mult ).toFixed(1),
     ta: +( base.ta * mult ).toFixed(1),
+    ba: +( (base.ba || 0) * mult ).toFixed(1),
   };
 }
 
@@ -3346,21 +3457,24 @@ function applySizingToProject(projId, sizeCode) {
   p.tshirtSize = sizeCode || null;
 
   if (sizeCode) {
-    const { se: totalSE, ta: totalTA } = getSizeFTE(sizeCode);
+    const { se: totalSE, ta: totalTA, ba: totalBA } = getSizeFTE(sizeCode);
 
     // Update project-level resource count
-    p.resources = Math.round(totalSE + totalTA);
+    p.resources = Math.round(totalSE + totalTA + totalBA);
 
     // Distribute FTEs across phases weighted by phase type
     const phases = (p.phases || []).filter(ph => ph.startDate && ph.endDate);
     if (phases.length > 0) {
       const seW   = phases.map(ph => PHASE_SE_W[ph.type] ?? 0.7);
       const taW   = phases.map(ph => PHASE_TA_W[ph.type] ?? 0.5);
+      const baW   = phases.map(ph => PHASE_BA_W[ph.type] ?? 0.4);
       const seSum = seW.reduce((a, b) => a + b, 0);
       const taSum = taW.reduce((a, b) => a + b, 0);
+      const baSum = baW.reduce((a, b) => a + b, 0);
       phases.forEach((ph, i) => {
         ph.seFte = seSum > 0 ? +((seW[i] / seSum) * totalSE).toFixed(1) : 0;
         ph.taFte = taSum > 0 ? +((taW[i] / taSum) * totalTA).toFixed(1) : 0;
+        ph.baFte = baSum > 0 ? +((baW[i] / baSum) * totalBA).toFixed(1) : 0;
       });
     }
   }
@@ -3406,6 +3520,11 @@ function renderSizingView() {
                 oninput="sizingConfig.bases['${s}'].ta=+this.value;saveSizingConfig();renderSizingView()">
               <div style="font-size:9px;color:#D97706;font-weight:700;margin-top:2px">TA</div>
             </div>
+            <div style="text-align:center">
+              <input class="sz-input" type="number" min="0" max="20" step="0.5" value="${sizingConfig.bases[s].ba}"
+                oninput="sizingConfig.bases['${s}'].ba=+this.value;saveSizingConfig();renderSizingView()">
+              <div style="font-size:9px;color:#0D9488;font-weight:700;margin-top:2px">BA</div>
+            </div>
           </div>
         </div>`).join('')}
     </div>
@@ -3417,7 +3536,7 @@ function renderSizingView() {
     ${sizes.map(s => {
       const b = sizingConfig.bases[s];
       return `<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${TSZ_COLORS[s]};margin-right:4px;vertical-align:middle"></span>
-      ${s} = ${b.se} SE · ${b.ta} TA base</span>`;
+      ${s} = ${b.se} SE · ${b.ta} TA · ${b.ba} BA base</span>`;
     }).join('')}
     <span style="margin-left:auto;font-size:10px;color:#CBD5E1">Click a size, then select sub-level to apply to phases</span>
   </div>`;
@@ -3438,7 +3557,7 @@ function renderSizingView() {
         </div>
         <div style="font-size:13px;font-weight:600;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:225px" title="${p.name}">${p.name}</div>
         <div style="font-size:10px;margin-top:3px;color:${cur ? TSZ_COLORS[curLet] : '#CBD5E1'}">
-          ${cur ? `${TSZ_LABELS[curLet]} ${cur[1]} · ${fmt(curFTE.se)} SE + ${fmt(curFTE.ta)} TA` : 'Not sized yet'}
+          ${cur ? `${TSZ_LABELS[curLet]} ${cur[1]} · ${fmt(curFTE.se)} SE + ${fmt(curFTE.ta)} TA + ${fmt(curFTE.ba)} BA` : 'Not sized yet'}
         </div>
       </div>
 
