@@ -3007,9 +3007,17 @@ function buildUtilModel() {
     return { mo, seDem, taDem, baDem, seCap, taCap, baCap, pmCap, seUtil, taUtil, baUtil,
              over: (seDem > seCap) || (taDem > taCap) || (baDem > baCap) };
   });
-  // KPIs
+  // KPIs — a role with zero demand across the whole horizon isn't part of the
+  // plan yet, so it's excluded from the blended average (its idle capacity still
+  // shows in the Idle/bench KPI). This keeps the headline meaningful as roles
+  // like BA are introduced before any demand has been entered for them.
+  const hasSeDem = rows.some(r => r.seDem > 0), hasTaDem = rows.some(r => r.taDem > 0), hasBaDem = rows.some(r => r.baDem > 0);
   const utilVals = [];
-  rows.forEach(r => { if (r.seCap > 0) utilVals.push(Math.min(r.seUtil, 999)); if (r.taCap > 0) utilVals.push(Math.min(r.taUtil, 999)); if (r.baCap > 0) utilVals.push(Math.min(r.baUtil, 999)); });
+  rows.forEach(r => {
+    if (hasSeDem && r.seCap > 0) utilVals.push(Math.min(r.seUtil, 999));
+    if (hasTaDem && r.taCap > 0) utilVals.push(Math.min(r.taUtil, 999));
+    if (hasBaDem && r.baCap > 0) utilVals.push(Math.min(r.baUtil, 999));
+  });
   const avgUtil    = utilVals.length ? Math.round(utilVals.reduce((a,b)=>a+b,0) / utilVals.length) : 0;
   const monthsOver = rows.filter(r => r.over).length;
   let peak = { pct:-1, mo:'—', role:'' };
