@@ -42,6 +42,10 @@ input[type=search]{width:180px}
 .view-tabs{display:flex;gap:0;background:#F1F5F9;border-radius:6px;padding:2px}
 .vtab{padding:5px 13px;font-size:11px;font-weight:600;border-radius:4px;cursor:pointer;border:none;background:transparent;color:#64748B;transition:all .15s}
 .vtab.active{background:#fff;color:#0F2544;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.dm-tab{padding:5px 14px;font-size:11px;font-weight:700;border-radius:5px;cursor:pointer;border:none;background:transparent;color:#64748B;transition:all .15s}
+.dm-tab.active{background:#fff;color:#0F2544;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+body.actual-mode .dm-tab.active{background:#0D9488;color:#fff}
+body.actual-mode .g-pbar{outline:1px dashed rgba(13,148,136,.5)}
 
 .main{padding:16px 24px 40px}
 .gantt-card{background:#fff;border-radius:8px;border:1px solid #E2E8F0;overflow:visible}
@@ -301,6 +305,10 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
 <div class="stats" id="statsBar"></div>
 
 <div class="controls">
+  <div style="display:inline-flex;background:#F1F5F9;border-radius:7px;padding:3px;margin-right:4px">
+    <button class="dm-tab active" onclick="setDataMode('planned',this)" title="Show planned dates & FTEs">Planned</button>
+    <button class="dm-tab" onclick="setDataMode('actual',this)" title="Show actual dates & FTEs">Actual</button>
+  </div>
   <span class="ctrl-label">Stream</span>
   <select id="fStream" onchange="render()">
     <option value="">All</option>
@@ -658,6 +666,31 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
           <div class="fhint">Business Analysts</div>
         </div>
       </div>
+
+      <!-- Actuals (collapsed by default) -->
+      <div style="border-top:1px solid #E2E8F0;margin-top:6px;padding-top:8px">
+        <button type="button" id="actToggle" onclick="toggleActuals()" style="display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;cursor:pointer;font-size:12px;font-weight:700;color:#0D9488;padding:2px 0;text-align:left">
+          <span id="actCaret">▸</span> Actuals — dates &amp; FTEs <span style="font-weight:400;color:#94A3B8;font-size:11px">(record what really happened)</span>
+        </button>
+        <div id="actSection" style="display:none;margin-top:10px">
+          <div class="frow">
+            <div class="fg">
+              <label class="fl">Actual start</label>
+              <input class="fi" type="date" id="mopAStart" min="2026-01-01" max="2026-12-31">
+            </div>
+            <div class="fg">
+              <label class="fl">Actual end</label>
+              <input class="fi" type="date" id="mopAEnd" min="2026-01-01" max="2026-12-31">
+            </div>
+          </div>
+          <div class="frow">
+            <div class="fg"><label class="fl">Actual SE</label><input class="fi" type="number" id="mopASeFte" min="0" max="10" step="0.5" placeholder="0"></div>
+            <div class="fg"><label class="fl">Actual TA</label><input class="fi" type="number" id="mopATaFte" min="0" max="10" step="0.5" placeholder="0"></div>
+            <div class="fg"><label class="fl">Actual BA</label><input class="fi" type="number" id="mopABaFte" min="0" max="10" step="0.5" placeholder="0"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="fg">
         <label class="fl">Colour</label>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="colorPicker"></div>
@@ -876,6 +909,42 @@ function pct(dateStr) {
 }
 function fmtDate(d) { return d ? d.slice(0,7).replace('-','/') : 'TBD'; }
 
+// ─── Planned / Actual mode ───────────────────────────────────────────────────
+//   dataMode swaps which set of fields the whole app reads: planned (startDate,
+//   endDate, seFte/taFte/baFte) or actual (aStart, aEnd, aSeFte/aTaFte/aBaFte).
+//   All timeline + demand/capacity computations go through these accessors.
+let dataMode = 'planned';
+function isActual() { return dataMode === 'actual'; }
+function phStart(ph) { return isActual() ? ph.aStart : ph.startDate; }
+function phEnd(ph)   { return isActual() ? ph.aEnd   : ph.endDate; }
+function phSetDates(ph, s, e) { if (isActual()) { ph.aStart = s; ph.aEnd = e; } else { ph.startDate = s; ph.endDate = e; } }
+function phFteSE(ph) { return (isActual() ? ph.aSeFte : ph.seFte) || 0; }
+function phFteTA(ph) { return (isActual() ? ph.aTaFte : ph.taFte) || 0; }
+function phFteBA(ph) { return (isActual() ? ph.aBaFte : ph.baFte) || 0; }
+/** Project span for the current mode: planned uses project dates; actual derives
+ *  from the min/max of the project's actual phase dates. */
+function projSpan(p) {
+  if (!isActual()) return { s: p.startDate, e: p.endDate };
+  const ss = (p.phases || []).map(ph => ph.aStart).filter(Boolean).sort();
+  const ee = (p.phases || []).map(ph => ph.aEnd).filter(Boolean).sort();
+  return { s: ss[0] || '', e: ee[ee.length - 1] || '' };
+}
+function setDataMode(m, el) {
+  dataMode = m;
+  document.querySelectorAll('.dm-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.body.classList.toggle('actual-mode', isActual());
+  render();
+  ['resView','lvView','dashboardView'].forEach(id => {
+    const v = document.getElementById(id);
+    if (v && v.style.display !== 'none') {
+      if (id === 'resView') renderResView();
+      else if (id === 'lvView') renderLvView();
+      else if (id === 'dashboardView') renderDashboardView();
+    }
+  });
+}
+
 // ─── Filter ───────────────────────────────────────────────────────────────────
 function filtered() {
   const s  = document.getElementById('fStream').value;
@@ -909,7 +978,8 @@ function colLinesHtml() {
 }
 
 function mainBarHtml(p) {
-  const tbd = !p.startDate || !p.endDate;
+  const sp = projSpan(p);
+  const tbd = !sp.s || !sp.e;
   const col  = SCOL[p.stream];
   const todayX = pct(TODAY);
   const todayEl = `<div class="today-line" style="left:${todayX.toFixed(2)}%;background:#EF4444"></div>`;
@@ -918,7 +988,7 @@ function mainBarHtml(p) {
     <div class="g-bar g-bar-tbd" style="left:1%;width:15%;border-color:${col}"
       onmouseenter="showTip(event,${p.id})" onmouseleave="hideTip()" onclick="openModal(${p.id})"></div>`;
   }
-  const x1 = pct(p.startDate), x2 = pct(p.endDate);
+  const x1 = pct(sp.s), x2 = pct(sp.e);
   const w  = Math.max(0.6, x2 - x1);
   const lbl = p.name.split('—').pop().split('GPS — ').pop().trim();
   return `${colLinesHtml()}${todayEl}
@@ -931,19 +1001,21 @@ function mainBarHtml(p) {
 function phaseBarHtml(ph, projId) {
   const todayX = pct(TODAY);
   const todayEl = `<div class="today-line" style="left:${todayX.toFixed(2)}%;background:#EF4444;opacity:.5"></div>`;
-  const tbd = !ph.startDate || !ph.endDate;
+  const pStart = phStart(ph), pEnd = phEnd(ph);
+  const tbd = !pStart || !pEnd;
   let bar = '';
-  // Build resource suffix for bar label
+  // Build resource suffix for bar label (current mode's FTEs)
   const resParts = [];
-  if (ph.seFte) resParts.push(`${ph.seFte}SE`);
-  if (ph.taFte) resParts.push(`${ph.taFte}TA`);
+  if (phFteSE(ph)) resParts.push(`${phFteSE(ph)}SE`);
+  if (phFteTA(ph)) resParts.push(`${phFteTA(ph)}TA`);
+  if (phFteBA(ph)) resParts.push(`${phFteBA(ph)}BA`);
   const resStr = resParts.length ? ` · ${resParts.join(' ')}` : '';
 
   if (tbd) {
     bar = `<div class="g-pbar g-pbar-tbd" style="left:1%;width:14%;border-color:${ph.color}"
-      onclick="openPhaseModal(${projId},${ph.id})" title="TBD"></div>`;
+      onclick="openPhaseModal(${projId},${ph.id})" title="${isActual() ? 'No actuals yet' : 'TBD'}"></div>`;
   } else {
-    const x1 = pct(ph.startDate), x2 = pct(ph.endDate);
+    const x1 = pct(pStart), x2 = pct(pEnd);
     const w  = Math.max(0.5, x2 - x1);
     bar = `<div class="g-pbar" style="left:${x1.toFixed(2)}%;width:${w.toFixed(2)}%;background:${ph.color}"
       onmouseenter="showPhaseTip(event,${projId},${ph.id})" onmouseleave="hideTip()"
@@ -995,10 +1067,11 @@ function ganttRow(p) {
     } else {
       phases.forEach(ph => {
         const dot = `<span style="width:8px;height:8px;border-radius:2px;background:${ph.color};display:inline-block;flex-shrink:0"></span>`;
-        // Resource pill: show SE and/or TA if set
+        // Resource pill: show current mode's SE / TA / BA if set
         const resParts = [];
-        if (ph.seFte) resParts.push(`${ph.seFte} SE`);
-        if (ph.taFte) resParts.push(`${ph.taFte} TA`);
+        if (phFteSE(ph)) resParts.push(`${phFteSE(ph)} SE`);
+        if (phFteTA(ph)) resParts.push(`${phFteTA(ph)} TA`);
+        if (phFteBA(ph)) resParts.push(`${phFteBA(ph)} BA`);
         const resPill = resParts.length
           ? `<span style="font-size:9px;font-weight:700;color:#fff;background:${ph.color};padding:1px 6px;border-radius:3px;white-space:nowrap;opacity:.85;flex-shrink:0">${resParts.join(' · ')}</span>`
           : '';
@@ -1007,7 +1080,7 @@ function ganttRow(p) {
             <button class="ph-drag-handle" onmousedown="startPhaseReorder(event,${p.id},${ph.id})" title="Drag to reorder phases" onclick="event.stopPropagation()">⠿</button>
             ${dot}
             <span class="pbadge" style="background:${ph.color}">${ph.name}</span>
-            <span style="font-size:11px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${fmtDate(ph.startDate)} → ${fmtDate(ph.endDate)}</span>
+            <span style="font-size:11px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${fmtDate(phStart(ph))} → ${fmtDate(phEnd(ph))}</span>
             ${resPill}
             <span style="font-size:9px;color:#CBD5E1;flex-shrink:0">✎</span>
           </div>
@@ -1319,7 +1392,13 @@ function openPhaseModal(projId, phaseId) {
     document.getElementById('mopSeFte').value       = ph.seFte != null ? ph.seFte : '';
     document.getElementById('mopTaFte').value       = ph.taFte != null ? ph.taFte : '';
     document.getElementById('mopBaFte').value       = ph.baFte != null ? ph.baFte : '';
+    document.getElementById('mopAStart').value      = ph.aStart || '';
+    document.getElementById('mopAEnd').value        = ph.aEnd   || '';
+    document.getElementById('mopASeFte').value      = ph.aSeFte != null ? ph.aSeFte : '';
+    document.getElementById('mopATaFte').value      = ph.aTaFte != null ? ph.aTaFte : '';
+    document.getElementById('mopABaFte').value      = ph.aBaFte != null ? ph.aBaFte : '';
     document.getElementById('mopNotes').value       = ph.notes     || '';
+    setActualsCollapsed();
     renderColorPicker(ph.color);
     del.style.display = 'inline-flex';
   } else {
@@ -1331,11 +1410,29 @@ function openPhaseModal(projId, phaseId) {
     document.getElementById('mopSeFte').value = '';
     document.getElementById('mopTaFte').value = '';
     document.getElementById('mopBaFte').value = '';
+    document.getElementById('mopAStart').value = '';
+    document.getElementById('mopAEnd').value = '';
+    document.getElementById('mopASeFte').value = '';
+    document.getElementById('mopATaFte').value = '';
+    document.getElementById('mopABaFte').value = '';
     document.getElementById('mopNotes').value = '';
+    setActualsCollapsed();
     renderColorPicker(PT['dev'].color);
     del.style.display = 'none';
   }
   document.getElementById('mop').classList.add('open');
+}
+
+function toggleActuals() {
+  const sec = document.getElementById('actSection');
+  const open = sec.style.display === 'none';
+  sec.style.display = open ? 'block' : 'none';
+  document.getElementById('actCaret').textContent = open ? '▾' : '▸';
+}
+function setActualsCollapsed() {
+  // Minimised by default — user opens when needed
+  document.getElementById('actSection').style.display = 'none';
+  document.getElementById('actCaret').textContent = '▸';
 }
 
 function savePhase() {
@@ -1350,6 +1447,9 @@ function savePhase() {
   const seFteRaw = parseFloat(document.getElementById('mopSeFte').value);
   const taFteRaw = parseFloat(document.getElementById('mopTaFte').value);
   const baFteRaw = parseFloat(document.getElementById('mopBaFte').value);
+  const aSeRaw = parseFloat(document.getElementById('mopASeFte').value);
+  const aTaRaw = parseFloat(document.getElementById('mopATaFte').value);
+  const aBaRaw = parseFloat(document.getElementById('mopABaFte').value);
   const data = {
     type:      document.getElementById('mopType').value,
     name,
@@ -1359,6 +1459,11 @@ function savePhase() {
     seFte:     isNaN(seFteRaw) ? 0 : seFteRaw,
     taFte:     isNaN(taFteRaw) ? 0 : taFteRaw,
     baFte:     isNaN(baFteRaw) ? 0 : baFteRaw,
+    aStart:    document.getElementById('mopAStart').value,
+    aEnd:      document.getElementById('mopAEnd').value,
+    aSeFte:    isNaN(aSeRaw) ? 0 : aSeRaw,
+    aTaFte:    isNaN(aTaRaw) ? 0 : aTaRaw,
+    aBaFte:    isNaN(aBaRaw) ? 0 : aBaRaw,
     notes:     document.getElementById('mopNotes').value.trim(),
   };
   if (phaseId) {
@@ -1474,15 +1579,16 @@ function getMonthProjects(mIdx) {
   return projects.filter(p => {
     if ((p.resources || 0) === 0) return false;
     // Prefer phase-level overlap so phase drags update levelling in real time
-    const datedPhases = (p.phases || []).filter(ph => ph.startDate && ph.endDate);
+    const datedPhases = (p.phases || []).filter(ph => phStart(ph) && phEnd(ph));
     if (datedPhases.length > 0) {
       return datedPhases.some(ph =>
-        new Date(ph.startDate) <= me && new Date(ph.endDate) >= ms
+        new Date(phStart(ph)) <= me && new Date(phEnd(ph)) >= ms
       );
     }
     // Fall back to project-level dates for projects with no phases yet
-    return p.startDate && p.endDate &&
-      new Date(p.startDate) <= me && new Date(p.endDate) >= ms;
+    const sp = projSpan(p);
+    return sp.s && sp.e &&
+      new Date(sp.s) <= me && new Date(sp.e) >= ms;
   });
 }
 
@@ -2234,12 +2340,13 @@ function computePhaseDemand() {
     const byProject = projects.map(p => {
       let se = 0, ta = 0, ba = 0;
       (p.phases || []).forEach(ph => {
-        if (!ph.startDate || !ph.endDate) return;
-        const ps = new Date(ph.startDate), pe = new Date(ph.endDate);
+        const s = phStart(ph), e = phEnd(ph);
+        if (!s || !e) return;
+        const ps = new Date(s), pe = new Date(e);
         if (ps <= me && pe >= ms) {
-          se += (ph.seFte || 0);
-          ta += (ph.taFte || 0);
-          ba += (ph.baFte || 0);
+          se += phFteSE(ph);
+          ta += phFteTA(ph);
+          ba += phFteBA(ph);
         }
       });
       return { id: p.id, name: p.name, stream: p.stream, squad: p.squad, se, ta, ba };
@@ -2845,8 +2952,8 @@ function startPhaseDrag(e, barEl, projId, phaseId) {
 
   const p  = projects.find(x => x.id === projId);
   const ph = (p?.phases || []).find(x => x.id === phaseId);
-  if (!ph || !ph.startDate || !ph.endDate) {
-    // TBD phase — open modal
+  if (!ph || !phStart(ph) || !phEnd(ph)) {
+    // No dates in this mode — open modal
     openPhaseModal(projId, phaseId);
     return;
   }
@@ -2855,8 +2962,8 @@ function startPhaseDrag(e, barEl, projId, phaseId) {
     projId, phaseId,
     areaRect: area.getBoundingClientRect(),
     startX:   e.clientX,
-    origStart: ph.startDate,
-    origEnd:   ph.endDate,
+    origStart: phStart(ph),
+    origEnd:   phEnd(ph),
     barEl,
   };
   phaseDragMoved = false;
@@ -2881,11 +2988,10 @@ document.addEventListener('mousemove', e => {
   const ph = (p?.phases || []).find(x => x.id === phaseId);
   if (!ph) return;
 
-  ph.startDate = shiftDate(origStart, deltaDays);
-  ph.endDate   = shiftDate(origEnd,   deltaDays);
+  phSetDates(ph, shiftDate(origStart, deltaDays), shiftDate(origEnd, deltaDays));
 
   // Move the bar visually without full DOM rebuild
-  const x1 = pct(ph.startDate), x2 = pct(ph.endDate);
+  const x1 = pct(phStart(ph)), x2 = pct(phEnd(ph));
   const w  = Math.max(0.4, x2 - x1);
   phaseDragState.barEl.style.left  = `${x1.toFixed(2)}%`;
   phaseDragState.barEl.style.width = `${w.toFixed(2)}%`;
@@ -3207,8 +3313,8 @@ function renderDashboardView() {
   const html = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:18px">
       <div>
-        <div style="font-size:18px;font-weight:800;color:#0F2544">Resource Utilisation — Portfolio</div>
-        <div style="font-size:12px;color:#64748B">Demand from project phases, matched against committed Work Order capacity · May–Dec 2026</div>
+        <div style="font-size:18px;font-weight:800;color:#0F2544">Resource Utilisation — Portfolio ${isActual() ? '<span style="font-size:11px;font-weight:700;color:#fff;background:#0D9488;padding:2px 9px;border-radius:5px;vertical-align:middle">ACTUALS</span>' : '<span style="font-size:11px;font-weight:700;color:#64748B;background:#F1F5F9;padding:2px 9px;border-radius:5px;vertical-align:middle">PLANNED</span>'}</div>
+        <div style="font-size:12px;color:#64748B">${isActual() ? 'Actual' : 'Planned'} demand from project phases, matched against committed Work Order capacity · May–Dec 2026</div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost btn-sm" onclick="dashExportPPT()" style="font-size:11px">📊 PowerPoint</button>
