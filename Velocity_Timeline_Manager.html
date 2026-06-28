@@ -51,7 +51,7 @@ body.actual-mode .g-pbar{outline:1px dashed rgba(13,148,136,.5)}
 .gantt-card{background:#fff;border-radius:8px;border:1px solid #E2E8F0;overflow:visible}
 
 /* Gantt header */
-.gantt-head{display:flex;background:#F8FAFC;border-bottom:2px solid #E2E8F0}
+.gantt-head{display:flex;background:#F8FAFC;border-bottom:2px solid #E2E8F0;position:sticky;top:0;z-index:20}
 .gh-info{width:320px;min-width:320px;padding:9px 14px;font-size:10px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.6px;border-right:1px solid #E2E8F0}
 .gh-months{flex:1;display:flex}
 .gh-mo{flex:1;padding:9px 4px;text-align:center;font-size:10px;font-weight:700;color:#64748B;border-right:1px solid #E2E8F0;letter-spacing:.3px}
@@ -354,7 +354,7 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
     <span class="gantt-zoom-lbl" id="ganttZoomLbl">May – Dec 2026 · drag timeline to pan</span>
     <span style="font-size:10px;color:#CBD5E1;white-space:nowrap">Ctrl + scroll to zoom</span>
   </div>
-  <div id="ganttWrapper" style="overflow-x:auto;border-radius:8px;-webkit-overflow-scrolling:touch;cursor:grab;user-select:none">
+  <div id="ganttWrapper" style="overflow:auto;max-height:calc(100vh - 200px);border-radius:8px;-webkit-overflow-scrolling:touch;cursor:grab;user-select:none">
     <div class="gantt-card" id="gantt"></div>
   </div>
 </div>
