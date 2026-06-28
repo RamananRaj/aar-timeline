@@ -107,6 +107,11 @@ body.drag-active *{cursor:grabbing!important;user-select:none;}
 .g-phase-row.ph-reorder-drag{opacity:.4}
 .g-phase-row.ph-drop-above{box-shadow:inset 0 2px 0 #0D9488}
 .g-phase-row.ph-drop-below{box-shadow:inset 0 -2px 0 #0D9488}
+.proj-drag-handle{cursor:grab;color:#CBD5E1;font-size:12px;padding:1px 2px;flex-shrink:0;border:none;background:none;border-radius:3px;transition:color .1s;line-height:1;user-select:none}
+.proj-drag-handle:hover{color:#0D9488;background:#F0FDF9}
+.g-row.proj-reorder-drag{opacity:.4}
+.g-row.proj-drop-above{box-shadow:inset 0 2px 0 #0D9488}
+.g-row.proj-drop-below{box-shadow:inset 0 -2px 0 #0D9488}
 .g-pbar-lbl{font-size:8px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .g-pbar-tbd{background:transparent!important;border-style:dashed;border-width:1.5px;top:8px;height:15px}
 
@@ -1032,9 +1037,11 @@ function ganttRow(p) {
   const expandIcon = isExp ? '▼' : '▶';
   const expandCls  = hasPhases ? 'has-phases' : '';
   const phaseCnt   = hasPhases ? `<span class="phase-count">${p.phases.length}</span>` : '';
+  const groupKey   = viewMode === 'squad' ? (p.squad || '') : viewMode === 'status' ? p.status : p.stream;
 
-  let html = `<div class="g-row">
+  let html = `<div class="g-row" data-proj-id="${p.id}" data-group="${groupKey}">
     <div class="g-info">
+      <button class="proj-drag-handle" onmousedown="startProjReorder(event,${p.id})" onclick="event.stopPropagation()" title="Drag to reorder within ${SLBL[p.stream]||'group'}">⠿</button>
       <button class="expand-btn ${expandCls}" onclick="toggleExpand(event,${p.id})" title="${hasPhases?'Show/hide phases':'No phases yet'}">${expandIcon}</button>
       ${phaseCnt}
       <div class="sdot sd-${p.status}"></div>
@@ -2934,6 +2941,57 @@ document.addEventListener('mouseup', e => {
   const toIdx   = p.phases.findIndex(ph => ph.id === targetId);
   if (toIdx === -1) { p.phases.splice(fromIdx, 0, moved); return; }
   p.phases.splice(targetPos === 'below' ? toIdx + 1 : toIdx, 0, moved);
+  persist();
+  render();
+});
+
+// ─── Project reorder — drag a project up/down within its group ────────────────
+let projReorderState = null;
+
+function startProjReorder(e, projId) {
+  e.stopPropagation();
+  e.preventDefault();
+  const row = e.currentTarget.closest('.g-row');
+  if (!row) return;
+  projReorderState = { projId, group: row.dataset.group, row, targetRow: null, targetPos: null };
+  row.classList.add('proj-reorder-drag');
+  document.body.classList.add('drag-active');
+}
+
+document.addEventListener('mousemove', e => {
+  if (!projReorderState) return;
+  const { group, row } = projReorderState;
+  const rows = [...document.querySelectorAll('.g-row')].filter(r => r !== row && r.dataset.group === group);
+  rows.forEach(r => r.classList.remove('proj-drop-above', 'proj-drop-below'));
+  let best = null, bestDist = Infinity;
+  rows.forEach(r => {
+    const rect = r.getBoundingClientRect();
+    const mid  = rect.top + rect.height / 2;
+    const dist = Math.abs(e.clientY - mid);
+    if (dist < bestDist) { bestDist = dist; best = { r, mid }; }
+  });
+  if (best) {
+    projReorderState.targetRow = best.r;
+    projReorderState.targetPos = e.clientY < best.mid ? 'above' : 'below';
+    best.r.classList.add(projReorderState.targetPos === 'above' ? 'proj-drop-above' : 'proj-drop-below');
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (!projReorderState) return;
+  const { projId, targetRow, targetPos } = projReorderState;
+  document.querySelectorAll('.g-row').forEach(r => r.classList.remove('proj-reorder-drag', 'proj-drop-above', 'proj-drop-below'));
+  document.body.classList.remove('drag-active');
+  projReorderState = null;
+
+  if (!targetRow) return;
+  const targetId = +targetRow.dataset.projId;
+  const fromIdx  = projects.findIndex(p => p.id === projId);
+  if (fromIdx === -1 || isNaN(targetId)) return;
+  const [moved] = projects.splice(fromIdx, 1);
+  const toIdx   = projects.findIndex(p => p.id === targetId);
+  if (toIdx === -1) { projects.splice(fromIdx, 0, moved); return; }
+  projects.splice(targetPos === 'below' ? toIdx + 1 : toIdx, 0, moved);
   persist();
   render();
 });
