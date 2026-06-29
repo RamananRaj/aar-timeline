@@ -45,7 +45,10 @@ input[type=search]{width:180px}
 .dm-tab{padding:5px 14px;font-size:11px;font-weight:700;border-radius:5px;cursor:pointer;border:none;background:transparent;color:#64748B;transition:all .15s}
 .dm-tab.active{background:#fff;color:#0F2544;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 body.actual-mode .dm-tab.active{background:#0D9488;color:#fff}
-body.actual-mode .g-pbar{outline:1px dashed rgba(13,148,136,.5)}
+.g-pbar.g-pbar-actual{cursor:default;background-image:repeating-linear-gradient(45deg,rgba(255,255,255,0) 0 4px,rgba(255,255,255,.45) 4px 8px);box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+.g-pbar.g-pbar-actual .g-pbar-lbl{font-size:7px;opacity:.95}
+.g-bar.g-bar-actual{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,0) 0 5px,rgba(255,255,255,.4) 5px 10px);box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+.g-bar.g-bar-actual .g-bar-lbl{font-size:8px;opacity:.95}
 
 .main{padding:16px 24px 40px}
 .gantt-card{background:#fff;border-radius:8px;border:1px solid #E2E8F0;overflow:visible}
@@ -983,49 +986,72 @@ function colLinesHtml() {
 }
 
 function mainBarHtml(p) {
-  const sp = projSpan(p);
-  const tbd = !sp.s || !sp.e;
   const col  = SCOL[p.stream];
-  const todayX = pct(TODAY);
-  const todayEl = `<div class="today-line" style="left:${todayX.toFixed(2)}%;background:#EF4444"></div>`;
-  if (tbd) {
-    return `${colLinesHtml()}${todayEl}
-    <div class="g-bar g-bar-tbd" style="left:1%;width:15%;border-color:${col}"
-      onmouseenter="showTip(event,${p.id})" onmouseleave="hideTip()" onclick="openModal(${p.id})"></div>`;
-  }
-  const x1 = pct(sp.s), x2 = pct(sp.e);
-  const w  = Math.max(0.6, x2 - x1);
+  const todayEl = `<div class="today-line" style="left:${pct(TODAY).toFixed(2)}%;background:#EF4444"></div>`;
+  // Actual project span = min/max of its phases' actual dates
+  const aS = (p.phases || []).map(x => x.aStart).filter(Boolean).sort();
+  const aE = (p.phases || []).map(x => x.aEnd).filter(Boolean).sort();
+  const hasActual = aS.length && aE.length;
   const lbl = p.name.split('—').pop().split('GPS — ').pop().trim();
-  return `${colLinesHtml()}${todayEl}
-  <div class="g-bar" style="left:${x1.toFixed(2)}%;width:${w.toFixed(2)}%;background:${col}"
-    onmouseenter="showTip(event,${p.id})" onmouseleave="hideTip()" onclick="openModal(${p.id})">
-    <span class="g-bar-lbl">${lbl}</span>
-  </div>`;
+  let bars = '';
+
+  if (!p.startDate || !p.endDate) {
+    bars += `<div class="g-bar g-bar-tbd" style="left:1%;width:15%;border-color:${col}"
+      onmouseenter="showTip(event,${p.id})" onmouseleave="hideTip()" onclick="openModal(${p.id})"></div>`;
+  } else {
+    const x1 = pct(p.startDate), x2 = pct(p.endDate), w = Math.max(0.6, x2 - x1);
+    const top = hasActual ? 5 : 8, h = hasActual ? 15 : 22;
+    bars += `<div class="g-bar" style="left:${x1.toFixed(2)}%;width:${w.toFixed(2)}%;background:${col};top:${top}px;height:${h}px"
+      onmouseenter="showTip(event,${p.id})" onmouseleave="hideTip()" onclick="openModal(${p.id})">
+      <span class="g-bar-lbl">${lbl}</span>
+    </div>`;
+  }
+  if (hasActual) {
+    const x1 = pct(aS[0]), x2 = pct(aE[aE.length - 1]), w = Math.max(0.6, x2 - x1);
+    bars += `<div class="g-bar g-bar-actual" style="left:${x1.toFixed(2)}%;width:${w.toFixed(2)}%;background:${col};top:23px;height:13px"
+      onclick="openModal(${p.id})" title="Actual: ${fmtDate(aS[0])} → ${fmtDate(aE[aE.length - 1])}">
+      <span class="g-bar-lbl">actual</span>
+    </div>`;
+  }
+  return `${colLinesHtml()}${todayEl}${bars}`;
 }
 
 function phaseBarHtml(ph, projId) {
   const todayX = pct(TODAY);
   const todayEl = `<div class="today-line" style="left:${todayX.toFixed(2)}%;background:#EF4444;opacity:.5"></div>`;
-  const pStart = phStart(ph), pEnd = phEnd(ph);
-  const tbd = !pStart || !pEnd;
+  const hasActual = !!(ph.aStart && ph.aEnd);
   let bar = '';
-  // Build resource suffix for bar label (current mode's FTEs)
-  const resParts = [];
-  if (phFteSE(ph)) resParts.push(`${phFteSE(ph)}SE`);
-  if (phFteTA(ph)) resParts.push(`${phFteTA(ph)}TA`);
-  if (phFteBA(ph)) resParts.push(`${phFteBA(ph)}BA`);
-  const resStr = resParts.length ? ` · ${resParts.join(' ')}` : '';
 
-  if (tbd) {
-    bar = `<div class="g-pbar g-pbar-tbd" style="left:1%;width:14%;border-color:${ph.color}"
-      onclick="openPhaseModal(${projId},${ph.id})" title="${isActual() ? 'No actuals yet' : 'TBD'}"></div>`;
+  // ── Planned (forecast) bar — always shown; draggable to adjust planned dates ──
+  const pRes = [];
+  if (ph.seFte) pRes.push(`${ph.seFte}SE`);
+  if (ph.taFte) pRes.push(`${ph.taFte}TA`);
+  if (ph.baFte) pRes.push(`${ph.baFte}BA`);
+  const pResStr = pRes.length ? ` · ${pRes.join(' ')}` : '';
+  const pTop = hasActual ? 4 : 7, pH = hasActual ? 12 : 17;
+  if (!ph.startDate || !ph.endDate) {
+    bar += `<div class="g-pbar g-pbar-tbd" style="left:1%;width:14%;border-color:${ph.color}"
+      onclick="openPhaseModal(${projId},${ph.id})" title="Planned dates TBD"></div>`;
   } else {
-    const x1 = pct(pStart), x2 = pct(pEnd);
-    const w  = Math.max(0.5, x2 - x1);
-    bar = `<div class="g-pbar" style="left:${x1.toFixed(2)}%;width:${w.toFixed(2)}%;background:${ph.color}"
+    const x1 = pct(ph.startDate), x2 = pct(ph.endDate), w = Math.max(0.5, x2 - x1);
+    bar += `<div class="g-pbar" style="left:${x1.toFixed(2)}%;width:${w.toFixed(2)}%;background:${ph.color};top:${pTop}px;height:${pH}px"
       onmouseenter="showPhaseTip(event,${projId},${ph.id})" onmouseleave="hideTip()"
       onmousedown="startPhaseDrag(event,this,${projId},${ph.id})">
-      <span class="g-pbar-lbl">${ph.name}${resStr}</span>
+      <span class="g-pbar-lbl">${ph.name}${pResStr}</span>
+    </div>`;
+  }
+
+  // ── Actual bar — secondary, stacked below the forecast when actuals recorded ──
+  if (hasActual) {
+    const ax1 = pct(ph.aStart), ax2 = pct(ph.aEnd), aw = Math.max(0.5, ax2 - ax1);
+    const aRes = [];
+    if (ph.aSeFte) aRes.push(`${ph.aSeFte}SE`);
+    if (ph.aTaFte) aRes.push(`${ph.aTaFte}TA`);
+    if (ph.aBaFte) aRes.push(`${ph.aBaFte}BA`);
+    const aResStr = aRes.length ? ` · ${aRes.join(' ')}` : '';
+    bar += `<div class="g-pbar g-pbar-actual" style="left:${ax1.toFixed(2)}%;width:${aw.toFixed(2)}%;background:${ph.color};top:19px;height:11px"
+      title="Actual: ${fmtDate(ph.aStart)} → ${fmtDate(ph.aEnd)}${aResStr}">
+      <span class="g-pbar-lbl">actual${aResStr}</span>
     </div>`;
   }
   return `<div class="col-lines">${GCOLS.map(()=>`<div class="col-line" style="border-color:#EEF5F0"></div>`).join('')}</div>${todayEl}${bar}`;
@@ -1074,20 +1100,24 @@ function ganttRow(p) {
     } else {
       phases.forEach(ph => {
         const dot = `<span style="width:8px;height:8px;border-radius:2px;background:${ph.color};display:inline-block;flex-shrink:0"></span>`;
-        // Resource pill: show current mode's SE / TA / BA if set
+        // Resource pill: planned SE / TA / BA if set
         const resParts = [];
-        if (phFteSE(ph)) resParts.push(`${phFteSE(ph)} SE`);
-        if (phFteTA(ph)) resParts.push(`${phFteTA(ph)} TA`);
-        if (phFteBA(ph)) resParts.push(`${phFteBA(ph)} BA`);
+        if (ph.seFte) resParts.push(`${ph.seFte} SE`);
+        if (ph.taFte) resParts.push(`${ph.taFte} TA`);
+        if (ph.baFte) resParts.push(`${ph.baFte} BA`);
         const resPill = resParts.length
           ? `<span style="font-size:9px;font-weight:700;color:#fff;background:${ph.color};padding:1px 6px;border-radius:3px;white-space:nowrap;opacity:.85;flex-shrink:0">${resParts.join(' · ')}</span>`
+          : '';
+        const actLbl = (ph.aStart && ph.aEnd)
+          ? `<span style="font-size:9px;color:#0D9488;font-weight:600;white-space:nowrap;flex-shrink:0" title="Actual dates">act ${fmtDate(ph.aStart)}→${fmtDate(ph.aEnd)}</span>`
           : '';
         html += `<div class="g-phase-row" data-proj="${p.id}" data-phase-id="${ph.id}">
           <div class="g-phase-info" onclick="openPhaseModal(${p.id},${ph.id})">
             <button class="ph-drag-handle" onmousedown="startPhaseReorder(event,${p.id},${ph.id})" title="Drag to reorder phases" onclick="event.stopPropagation()">⠿</button>
             ${dot}
             <span class="pbadge" style="background:${ph.color}">${ph.name}</span>
-            <span style="font-size:11px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${fmtDate(phStart(ph))} → ${fmtDate(phEnd(ph))}</span>
+            <span style="font-size:11px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${fmtDate(ph.startDate)} → ${fmtDate(ph.endDate)}</span>
+            ${actLbl}
             ${resPill}
             <span style="font-size:9px;color:#CBD5E1;flex-shrink:0">✎</span>
           </div>
@@ -3010,8 +3040,8 @@ function startPhaseDrag(e, barEl, projId, phaseId) {
 
   const p  = projects.find(x => x.id === projId);
   const ph = (p?.phases || []).find(x => x.id === phaseId);
-  if (!ph || !phStart(ph) || !phEnd(ph)) {
-    // No dates in this mode — open modal
+  if (!ph || !ph.startDate || !ph.endDate) {
+    // No planned dates — open modal
     openPhaseModal(projId, phaseId);
     return;
   }
@@ -3020,8 +3050,8 @@ function startPhaseDrag(e, barEl, projId, phaseId) {
     projId, phaseId,
     areaRect: area.getBoundingClientRect(),
     startX:   e.clientX,
-    origStart: phStart(ph),
-    origEnd:   phEnd(ph),
+    origStart: ph.startDate,
+    origEnd:   ph.endDate,
     barEl,
   };
   phaseDragMoved = false;
@@ -3046,10 +3076,11 @@ document.addEventListener('mousemove', e => {
   const ph = (p?.phases || []).find(x => x.id === phaseId);
   if (!ph) return;
 
-  phSetDates(ph, shiftDate(origStart, deltaDays), shiftDate(origEnd, deltaDays));
+  ph.startDate = shiftDate(origStart, deltaDays);
+  ph.endDate   = shiftDate(origEnd,   deltaDays);
 
   // Move the bar visually without full DOM rebuild
-  const x1 = pct(phStart(ph)), x2 = pct(phEnd(ph));
+  const x1 = pct(ph.startDate), x2 = pct(ph.endDate);
   const w  = Math.max(0.4, x2 - x1);
   phaseDragState.barEl.style.left  = `${x1.toFixed(2)}%`;
   phaseDragState.barEl.style.width = `${w.toFixed(2)}%`;
